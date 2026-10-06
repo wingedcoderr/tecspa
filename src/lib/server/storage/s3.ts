@@ -20,11 +20,11 @@ for (const variable of requiredEnvironmentVariables) {
 export const MEMBER_MEDIA_BUCKET = 'member-media';
 
 export const s3 = new S3Client({
-	endpoint: env.AWS_ENDPOINT_URL_S3,
-	region: env.AWS_REGION,
+	endpoint: env.AWS_ENDPOINT_URL_S3!,
+	region: env.AWS_REGION!,
 	credentials: {
-		accessKeyId: env.AWS_ACCESS_KEY_ID,
-		secretAccessKey: env.AWS_SECRET_ACCESS_KEY
+		accessKeyId: env.AWS_ACCESS_KEY_ID!,
+		secretAccessKey: env.AWS_SECRET_ACCESS_KEY!
 	},
 	forcePathStyle: true
 });

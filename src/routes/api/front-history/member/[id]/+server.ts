@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 type FrontHistoryRow = {
@@ -34,6 +35,10 @@ export const GET: RequestHandler = async ({
 		throw error(400, 'Missing member ID.');
 	}
 
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
+	}
+
 	const { system } = await getAuthenticatedSystem(cookies);
 
 	const result = await pool.query<FrontHistoryRow>(
@@ -48,6 +53,7 @@ export const GET: RequestHandler = async ({
 			WHERE member_id = $1
 				AND system_id = $2
 			ORDER BY started_at DESC
+			LIMIT 500
 		`,
 		[id, system.id]
 	);

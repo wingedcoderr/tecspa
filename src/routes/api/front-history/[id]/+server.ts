@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 export const PATCH: RequestHandler = async ({
@@ -18,6 +19,10 @@ export const PATCH: RequestHandler = async ({
 		);
 	}
 
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
+	}
+
 	const body = await request.json();
 
 	const note =
@@ -27,6 +32,13 @@ export const PATCH: RequestHandler = async ({
 
 	if (note === null) {
 		throw error(400, 'A note string is required.');
+	}
+
+	if (note.length > 2000) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
 	}
 
 	const { system } = await getAuthenticatedSystem(cookies);
@@ -74,6 +86,10 @@ export const DELETE: RequestHandler = async ({
 			400,
 			'Front history entry ID is required.'
 		);
+	}
+
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
 	}
 
 	const { system } = await getAuthenticatedSystem(cookies);

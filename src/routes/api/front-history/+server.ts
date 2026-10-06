@@ -43,6 +43,7 @@ export async function GET({
 			FROM front_history
 			WHERE system_id = $1
 			ORDER BY started_at DESC
+			LIMIT 500
 		`,
 		[system.id]
 	);

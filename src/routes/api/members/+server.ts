@@ -29,7 +29,8 @@ export async function GET({
 					is_fronting
 				FROM members
 				WHERE system_id = $1
-				ORDER BY name;
+				ORDER BY name
+				LIMIT 500;
 			`,
 			[system.id]
 		);
@@ -46,7 +47,8 @@ export async function GET({
 					sort_order
 				FROM custom_fields
 				WHERE system_id = $1
-				ORDER BY member_id, sort_order;
+				ORDER BY member_id, sort_order
+				LIMIT 500;
 			`,
 			[system.id]
 		);

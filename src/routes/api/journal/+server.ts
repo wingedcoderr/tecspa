@@ -84,6 +84,7 @@ export async function GET({
 			ORDER BY
 				is_pinned DESC,
 				created_at DESC
+			LIMIT 500
 		`,
 		[system.id]
 	);
@@ -140,6 +141,20 @@ export const POST: RequestHandler = async ({
 		typeof body.body === 'string'
 			? body.body
 			: '';
+
+	if (title.length > 300) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
+
+	if (entryBody.length > 200000) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
 
 	const tags = Array.isArray(body.tags)
 		? body.tags.filter(

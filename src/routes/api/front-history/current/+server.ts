@@ -43,6 +43,7 @@ export async function GET({
 			WHERE system_id = $1
 				AND ended_at IS NULL
 			ORDER BY started_at ASC
+			LIMIT 500
 		`,
 		[system.id]
 	);
