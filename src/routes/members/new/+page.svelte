@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 
-import { createMember } from '$lib/repositories/members';
+	import { isDesktop } from '$lib/platform';
 	import {
 		selectAndStoreMemberImage
 	} from '$lib/media/member-media';
@@ -63,6 +63,35 @@ function updateCustomField(
 		errorMessage = '';
 
 		try {
+			if (!isDesktop()) {
+				const selectedFile = await new Promise<File | null>((resolve) => {
+					const input = document.createElement('input');
+					input.type = 'file';
+					input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
+					input.onchange = () => resolve(input.files?.[0] ?? null);
+					input.click();
+				});
+
+				if (!selectedFile) return;
+
+				const dataUrl = await new Promise<string>((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onload = () => resolve(String(reader.result));
+					reader.onerror = () => reject(new Error('Could not read the selected image.'));
+					reader.readAsDataURL(selectedFile);
+				});
+
+				if (kind === 'avatar') {
+					avatar = dataUrl;
+					avatarPreview = dataUrl;
+				} else {
+					banner = dataUrl;
+					bannerPreview = dataUrl;
+				}
+
+				return;
+			}
+
 			const result = await selectAndStoreMemberImage(
 				memberId,
 				kind,
@@ -99,7 +128,6 @@ function updateCustomField(
 		saving = true;
 
 		try {
-
 			const newMember: Member = {
 	id: memberId,
 	name: name.trim(),
@@ -125,7 +153,31 @@ function updateCustomField(
 	customFields
 };
 
-			await createMember(newMember);
+			if (isDesktop()) {
+				const { initializeDatabase } = await import('$lib/db/database');
+				const { createMember } = await import('$lib/repositories/members');
+
+				await initializeDatabase();
+				await createMember(newMember);
+			} else {
+				const response = await fetch('/api/members', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(newMember)
+				});
+
+				if (!response.ok) {
+					const data = await response.json().catch(() => null);
+
+					throw new Error(
+						data?.error ??
+							`Failed to create member (${response.status}).`
+					);
+				}
+			}
+
 			await goto('/members');
 		} catch (error) {
 			console.error('Failed to create member:', error);
