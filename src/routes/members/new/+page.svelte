@@ -169,13 +169,19 @@ function updateCustomField(
 				});
 
 				if (!response.ok) {
-					const data = await response.json().catch(() => null);
+	const data = await response.json().catch(() => null);
 
-					throw new Error(
-						data?.error ??
-							`Failed to create member (${response.status}).`
-					);
-				}
+	console.error('Create member API error:', {
+		status: response.status,
+		statusText: response.statusText,
+		data
+	});
+
+	throw new Error(
+		data?.error ??
+			`Failed to create member (${response.status} ${response.statusText}).`
+	);
+}
 			}
 
 			await goto('/members');
