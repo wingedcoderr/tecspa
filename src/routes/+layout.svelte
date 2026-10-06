@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { inject } from '@vercel/analytics';
 	import { onMount } from 'svelte';
 	import { applyTheme, loadTheme } from '$lib/theme/theme';
 
@@ -11,6 +12,8 @@
 	let authLoading = true;
 
 	onMount(async () => {
+		inject()
+		
 		applyTheme(loadTheme());
 
 		try {
