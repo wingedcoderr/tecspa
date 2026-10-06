@@ -8,6 +8,10 @@ import {
 
 import { pool } from '$lib/server/db/postgres';
 import {
+	isUuid,
+	sniffImageMime
+} from '$lib/server/validate';
+import {
 	MEMBER_MEDIA_BUCKET,
 	s3
 } from '$lib/server/storage/s3';
@@ -15,6 +19,25 @@ import {
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 import type { AmpersandImportData } from '$lib/importers/ampersand';
+
+const MAX_IMPORT_BODY_BYTES = 50 * 1024 * 1024;
+
+const MAX_IMPORT_MEMBERS = 200;
+
+const MAX_IMPORT_CUSTOM_FIELDS_PER_MEMBER = 50;
+
+const MAX_IMPORT_FRONT_HISTORY = 1000;
+
+const MAX_EMBEDDED_IMAGE_BYTES = 5 * 1024 * 1024;
+
+class ImportValidationError extends Error {
+	status: number;
+
+	constructor(message: string, status: number) {
+		super(message);
+		this.status = status;
+	}
+}
 
 type MediaUpload = {
 	key: string;
@@ -112,17 +135,42 @@ function extensionForMimeType(
 async function uploadEmbeddedImage(
 	memberId: string,
 	kind: 'avatar' | 'banner',
-	dataUri: string,
-	mimeType: string
+	dataUri: string
 ): Promise<string> {
+	if (!isUuid(memberId)) {
+		throw new ImportValidationError(
+			'Invalid input',
+			422
+		);
+	}
+
+	const bytes =
+		dataUriToBytes(dataUri);
+
+	if (
+		bytes.byteLength >
+		MAX_EMBEDDED_IMAGE_BYTES
+	) {
+		throw new ImportValidationError(
+			'Payload too large',
+			413
+		);
+	}
+
+	const mimeType = sniffImageMime(bytes);
+
+	if (!mimeType) {
+		throw new ImportValidationError(
+			'Unsupported media type',
+			415
+		);
+	}
+
 	const extension =
 		extensionForMimeType(mimeType);
 
 	const key =
 		`members/${memberId}/${kind}.${extension}`;
-
-	const bytes =
-		dataUriToBytes(dataUri);
 
 	await s3.send(
 		new PutObjectCommand({
@@ -143,11 +191,38 @@ export const POST: RequestHandler = async ({
 	const { system } =
 		await getAuthenticatedSystem(cookies);
 
+	const contentLength =
+		Number(
+			request.headers.get(
+				'content-length'
+			)
+		) || 0;
+
+	if (contentLength > MAX_IMPORT_BODY_BYTES) {
+		return json(
+			{ error: 'Payload too large' },
+			{ status: 413 }
+		);
+	}
+
 	let importData: AmpersandImportData;
 
 	try {
-		importData =
-			(await request.json()) as AmpersandImportData;
+		const raw = await request.text();
+
+		if (
+			Buffer.byteLength(raw) >
+			MAX_IMPORT_BODY_BYTES
+		) {
+			return json(
+				{ error: 'Payload too large' },
+				{ status: 413 }
+			);
+		}
+
+		importData = JSON.parse(
+			raw
+		) as AmpersandImportData;
 	} catch {
 		return json(
 			{
@@ -155,6 +230,40 @@ export const POST: RequestHandler = async ({
 			},
 			{ status: 400 }
 		);
+	}
+
+	if (
+		(importData.members?.length ?? 0) >
+		MAX_IMPORT_MEMBERS
+	) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
+
+	if (
+		(importData.frontHistory?.length ?? 0) >
+		MAX_IMPORT_FRONT_HISTORY
+	) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
+
+	for (const item of importData.members ??
+		[]) {
+		if (
+			(item.member.customFields?.length ??
+				0) >
+			MAX_IMPORT_CUSTOM_FIELDS_PER_MEMBER
+		) {
+			return json(
+				{ error: 'Invalid input' },
+				{ status: 422 }
+			);
+		}
 	}
 
 	const client = await pool.connect();
@@ -189,8 +298,7 @@ export const POST: RequestHandler = async ({
 						await uploadEmbeddedImage(
 							member.id,
 							'avatar',
-							avatarImage.dataUri,
-							avatarImage.mimeType
+							avatarImage.dataUri
 						);
 
 					uploadedMedia.push({ key });
@@ -211,8 +319,7 @@ export const POST: RequestHandler = async ({
 						await uploadEmbeddedImage(
 							member.id,
 							'banner',
-							bannerImage.dataUri,
-							bannerImage.mimeType
+							bannerImage.dataUri
 						);
 
 					uploadedMedia.push({ key });
@@ -411,18 +518,23 @@ export const POST: RequestHandler = async ({
 			}
 		}
 
+		if (
+			error instanceof
+			ImportValidationError
+		) {
+			return json(
+				{ error: error.message },
+				{ status: error.status }
+			);
+		}
+
 		console.error(
 			'TECSPA import failed:',
 			error
 		);
 
 		return json(
-			{
-				error:
-					error instanceof Error
-						? error.message
-						: 'The system could not be imported.'
-			},
+			{ error: 'Import failed' },
 			{ status: 500 }
 		);
 	} finally {

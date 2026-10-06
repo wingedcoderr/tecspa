@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import type { RequestHandler } from '@sveltejs/kit';
+import type { RequestEvent, RequestHandler } from '@sveltejs/kit';
 
 import {
 	createAccount,
@@ -10,12 +10,30 @@ import {
 	isValidPassword,
 	isValidUsername
 } from '$lib/server/auth';
+import { enforceRateLimit } from '$lib/server/rate-limit';
 
-export const POST: RequestHandler = async ({
-	request,
-	cookies
-}) => {
+function getClientAddressSafe(event: RequestEvent): string {
+	try {
+		return event.getClientAddress();
+	} catch {
+		return 'unknown';
+	}
+}
+
+export const POST: RequestHandler = async (event) => {
+	const { request, cookies } = event;
+
 	const body = await request.json();
+
+	const tooManyRequests = await enforceRateLimit(
+		`register:${getClientAddressSafe(event)}`,
+		5,
+		3600
+	);
+
+	if (tooManyRequests) {
+		return tooManyRequests;
+	}
 
 	const email =
 		typeof body.email === 'string'

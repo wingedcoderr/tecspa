@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 export const GET: RequestHandler = async ({
@@ -9,6 +10,13 @@ export const GET: RequestHandler = async ({
 	cookies
 }) => {
 	const memberId = params.id;
+
+	if (!isUuid(memberId)) {
+		return json(
+			{ error: 'Invalid id' },
+			{ status: 400 }
+		);
+	}
 
 	try {
 		const { system } = await getAuthenticatedSystem(cookies);

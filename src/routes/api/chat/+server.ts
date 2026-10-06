@@ -41,6 +41,7 @@ export const GET: RequestHandler = async ({
 			FROM chat_messages
 			WHERE system_id = $1
 			ORDER BY created_at ASC
+			LIMIT 500
 		`,
 		[system.id]
 	);
@@ -86,6 +87,15 @@ export const POST: RequestHandler = async ({
 				error: 'Message cannot be empty.'
 			},
 			{ status: 400 }
+		);
+	}
+
+	if (message.length > 4000) {
+		return json(
+			{
+				error: 'Invalid input'
+			},
+			{ status: 422 }
 		);
 	}
 

@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 type ChatMessageRow = {
@@ -32,6 +33,13 @@ export const PATCH: RequestHandler = async ({
 	const { system } =
 		await getAuthenticatedSystem(cookies);
 
+	if (!isUuid(params.id)) {
+		return json(
+			{ error: 'Invalid id' },
+			{ status: 400 }
+		);
+	}
+
 	const body = await request.json();
 
 	const message =
@@ -45,6 +53,15 @@ export const PATCH: RequestHandler = async ({
 				error: 'Message cannot be empty.'
 			},
 			{ status: 400 }
+		);
+	}
+
+	if (message.length > 4000) {
+		return json(
+			{
+				error: 'Invalid input'
+			},
+			{ status: 422 }
 		);
 	}
 
@@ -93,6 +110,13 @@ export const DELETE: RequestHandler = async ({
 }) => {
 	const { system } =
 		await getAuthenticatedSystem(cookies);
+
+	if (!isUuid(params.id)) {
+		return json(
+			{ error: 'Invalid id' },
+			{ status: 400 }
+		);
+	}
 
 	const result = await pool.query(
 		`

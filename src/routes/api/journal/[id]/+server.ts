@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import type { Cookies } from '@sveltejs/kit';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 type JournalEntryRow = {
@@ -73,6 +74,10 @@ export const GET: RequestHandler = async ({
 		);
 	}
 
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
+	}
+
 	const { system } = await getAuthenticatedSystem(cookies);
 
 	const result = await pool.query<JournalEntryRow>(
@@ -120,6 +125,10 @@ export const PATCH: RequestHandler = async ({
 		);
 	}
 
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
+	}
+
 	const { system } = await getAuthenticatedSystem(cookies);
 
 	const body = await request.json();
@@ -163,6 +172,20 @@ export const PATCH: RequestHandler = async ({
 		typeof body.body === 'string'
 			? body.body
 			: '';
+
+	if (title.length > 300) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
+
+	if (entryBody.length > 200000) {
+		return json(
+			{ error: 'Invalid input' },
+			{ status: 422 }
+		);
+	}
 
 	const tags = Array.isArray(body.tags)
 		? body.tags.filter(
@@ -239,6 +262,10 @@ export const DELETE: RequestHandler = async ({
 			400,
 			'Journal entry ID is required.'
 		);
+	}
+
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
 	}
 
 	const { system } = await getAuthenticatedSystem(cookies);

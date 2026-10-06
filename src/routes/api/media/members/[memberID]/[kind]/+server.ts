@@ -6,6 +6,10 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 import { pool } from '$lib/server/db/postgres';
 import {
+	ALLOWED_IMAGE_MIME,
+	isUuid
+} from '$lib/server/validate';
+import {
 	MEMBER_MEDIA_BUCKET,
 	s3
 } from '$lib/server/storage/s3';
@@ -32,6 +36,10 @@ export const GET: RequestHandler = async ({
 
 	if (!memberID || !kind || !isMediaKind(kind)) {
 		throw error(400, 'Invalid member media request.');
+	}
+
+	if (!isUuid(memberID)) {
+		throw error(400, 'Invalid id');
 	}
 
 	const { system } =
@@ -100,11 +108,18 @@ export const GET: RequestHandler = async ({
 
 	new Uint8Array(arrayBuffer).set(bytes);
 
+	const contentType =
+		object.ContentType &&
+		(
+			ALLOWED_IMAGE_MIME as readonly string[]
+		).includes(object.ContentType)
+			? object.ContentType
+			: 'application/octet-stream';
+
 	return new Response(arrayBuffer, {
 		headers: {
-			'Content-Type':
-				object.ContentType ??
-				'application/octet-stream',
+			'Content-Type': contentType,
+			'Content-Disposition': 'inline',
 			'Cache-Control':
 				'private, max-age=3600'
 		}

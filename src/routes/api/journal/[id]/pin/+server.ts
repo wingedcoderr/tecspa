@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import type { Cookies } from '@sveltejs/kit';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 type JournalEntryRow = {
@@ -72,6 +73,10 @@ export const PATCH: RequestHandler = async ({
 			400,
 			'Journal entry ID is required.'
 		);
+	}
+
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
 	}
 
 	const { system } = await getAuthenticatedSystem(cookies);

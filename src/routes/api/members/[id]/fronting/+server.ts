@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 
 import { pool } from '$lib/server/db/postgres';
+import { isUuid } from '$lib/server/validate';
 import { getAuthenticatedSystem } from '$lib/server/system';
 
 export async function PUT({
@@ -16,6 +17,10 @@ export async function PUT({
 
 	if (!id) {
 		throw error(400, 'Member ID is required.');
+	}
+
+	if (!isUuid(id)) {
+		throw error(400, 'Invalid id');
 	}
 
 	const body = await request.json();

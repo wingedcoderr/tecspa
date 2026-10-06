@@ -1,14 +1,25 @@
 import { json } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import type { RequestHandler } from '@sveltejs/kit';
+import type { RequestEvent, RequestHandler } from '@sveltejs/kit';
 
 import {
 	authenticateAccount,
 	createSession,
 	getSessionCookieName
 } from '$lib/server/auth';
+import { enforceRateLimit } from '$lib/server/rate-limit';
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+function getClientAddressSafe(event: RequestEvent): string {
+	try {
+		return event.getClientAddress();
+	} catch {
+		return 'unknown';
+	}
+}
+
+export const POST: RequestHandler = async (event) => {
+	const { request, cookies } = event;
+
 	const body = await request.json();
 
 	const email =
@@ -26,6 +37,18 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			{ error: 'Email and password are required.' },
 			{ status: 400 }
 		);
+	}
+
+	const normalizedEmail = email.trim().toLowerCase();
+
+	const tooManyRequests = await enforceRateLimit(
+		`login:${getClientAddressSafe(event)}:${normalizedEmail}`,
+		10,
+		900
+	);
+
+	if (tooManyRequests) {
+		return tooManyRequests;
 	}
 
 	const account = await authenticateAccount(

@@ -4,11 +4,22 @@ import {
 	scrypt as scryptCallback,
 	timingSafeEqual
 } from 'node:crypto';
+import type { BinaryLike, ScryptOptions } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { pool } from '$lib/server/db/postgres';
 
-const scrypt = promisify(scryptCallback);
+const scrypt = promisify(scryptCallback) as (
+	password: BinaryLike,
+	salt: BinaryLike,
+	keylen: number,
+	options: ScryptOptions
+) => Promise<Buffer>;
+
+const SCRYPT_N = 2 ** 15;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_MAXMEM = 64 * 1024 * 1024;
 
 const SESSION_COOKIE = 'tecspa_session';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -49,20 +60,24 @@ export function isValidUsername(username: string): boolean {
 }
 
 export function isValidPassword(password: string): boolean {
-	return password.length >= 8;
+	return password.length >= 8 && password.length <= 1024;
 }
 
 async function hashPassword(password: string): Promise<string> {
 	const salt = randomBytes(16);
 
-const derivedKey = (await scrypt(
-	password,
-	salt,
-	64
-)) as Buffer;
+	const derivedKey = await scrypt(password, salt, 64, {
+		N: SCRYPT_N,
+		r: SCRYPT_R,
+		p: SCRYPT_P,
+		maxmem: SCRYPT_MAXMEM
+	});
 
 	return [
 		'scrypt',
+		String(SCRYPT_N),
+		String(SCRYPT_R),
+		String(SCRYPT_P),
 		salt.toString('base64'),
 		derivedKey.toString('base64')
 	].join('$');
@@ -74,31 +89,73 @@ async function verifyPassword(
 ): Promise<boolean> {
 	const parts = storedHash.split('$');
 
-	if (parts.length !== 3 || parts[0] !== 'scrypt') {
+	if (parts[0] !== 'scrypt') {
 		return false;
 	}
 
-	const salt = Buffer.from(parts[1], 'base64');
-	const expectedHash = Buffer.from(parts[2], 'base64');
+	let params: { N: number; r: number; p: number };
+	let salt: Buffer;
+	let expectedHash: Buffer;
+
+	// scrypt$N$r$p$<salt b64>$<key b64>
+	if (parts.length === 6) {
+		const N = Number(parts[1]);
+		const r = Number(parts[2]);
+		const p = Number(parts[3]);
+
+		if (!Number.isInteger(N) || N < 2 ** 14 || N > 2 ** 21) {
+			return false;
+		}
+
+		if (!Number.isInteger(r) || r < 8 || r > 16) {
+			return false;
+		}
+
+		if (!Number.isInteger(p) || p < 1 || p > 4) {
+			return false;
+		}
+
+		params = { N, r, p };
+		salt = Buffer.from(parts[4], 'base64');
+		expectedHash = Buffer.from(parts[5], 'base64');
+	} else if (parts.length === 3) {
+		// Legacy format: Node scrypt defaults (N=16384, r=8, p=1).
+		params = { N: 16384, r: 8, p: 1 };
+		salt = Buffer.from(parts[1], 'base64');
+		expectedHash = Buffer.from(parts[2], 'base64');
+	} else {
+		return false;
+	}
 
 	if (salt.length === 0 || expectedHash.length === 0) {
 		return false;
 	}
 
-const derivedKey = (await scrypt(
-	password,
-	salt,
-	expectedHash.length
-)) as Buffer;
-	if (derivedKey.length !== expectedHash.length) {
+	try {
+		const derivedKey = await scrypt(password, salt, expectedHash.length, {
+			...params,
+			maxmem: SCRYPT_MAXMEM
+		});
+
+		if (derivedKey.length !== expectedHash.length) {
+			return false;
+		}
+
+		return timingSafeEqual(derivedKey, expectedHash);
+	} catch {
 		return false;
 	}
-
-	return timingSafeEqual(derivedKey, expectedHash);
 }
 
 function hashSessionToken(token: string): string {
 	return createHash('sha256').update(token).digest('hex');
+}
+
+let dummyHashPromise: Promise<string> | null = null;
+
+function getDummyHash(): Promise<string> {
+	dummyHashPromise ??= hashPassword(randomBytes(32).toString('hex'));
+	return dummyHashPromise;
 }
 
 export function getSessionCookieName(): string {
@@ -176,6 +233,7 @@ export async function authenticateAccount(
 	const account = await findAccountByEmail(email);
 
 	if (!account) {
+		await getDummyHash();
 		return null;
 	}
 
@@ -192,6 +250,15 @@ export async function authenticateAccount(
 		id: account.id,
 		username: account.username
 	};
+}
+
+async function deleteExpiredSessions(): Promise<void> {
+	await pool.query(
+		`
+			DELETE FROM sessions
+			WHERE expires_at::timestamptz <= now()
+		`
+	);
 }
 
 export async function createSession(accountId: string): Promise<{
@@ -227,6 +294,8 @@ export async function createSession(accountId: string): Promise<{
 			createdAt
 		]
 	);
+
+	await deleteExpiredSessions();
 
 	return {
 		token,
@@ -274,6 +343,7 @@ export async function getAccountFromSession(
 
 	if (expiresAt.getTime() <= Date.now()) {
 		await deleteSession(token);
+		await deleteExpiredSessions();
 		return null;
 	}
 
