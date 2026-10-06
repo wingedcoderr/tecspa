@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { inject } from '@vercel/analytics';
 	import { onMount } from 'svelte';
-	import { applyTheme, loadTheme } from '$lib/theme/theme';
+import { applyTheme, loadTheme } from '$lib/theme/theme';
+import {
+	applySelectedFont,
+	clearSelectedFont,
+	getCustomFonts,
+	getSelectedFontId,
+	loadCustomFont
+} from '$lib/fonts/font-manager';
 
 	interface Account {
 		id: string;
@@ -12,11 +19,44 @@
 	let authLoading = true;
 
 	onMount(async () => {
-		inject()
-		
-		applyTheme(loadTheme());
+	applyTheme(loadTheme());
 
-		try {
+	try {
+		const selectedFontId =
+			getSelectedFontId();
+
+		if (selectedFontId) {
+			const customFonts =
+				await getCustomFonts();
+
+			const selectedFont =
+				customFonts.find(
+					(font) =>
+						font.id === selectedFontId
+				);
+
+			if (selectedFont) {
+				const loadedFont =
+					await loadCustomFont(
+						selectedFont.id
+					);
+
+				applySelectedFont(
+					loadedFont
+				);
+			} else {
+				clearSelectedFont();
+				applySelectedFont(null);
+			}
+		} else {
+			applySelectedFont(null);
+		}
+	} catch {
+		clearSelectedFont();
+		applySelectedFont(null);
+	}
+
+	try {
 			const response = await fetch('/api/auth/session');
 			const data = await response.json();
 
@@ -1362,6 +1402,18 @@
 		position: relative;
 		z-index: 1;
 	}	
+
+/* =========================================================
+   ACCESSIBILITY / CUSTOM FONT OVERRIDE
+   ========================================================= */
+
+:global(html[data-tecspa-font]) {
+	--tecspa-heading-font:
+		var(--tecspa-accessibility-font) !important;
+
+	--tecspa-body-font:
+		var(--tecspa-accessibility-font) !important;
+}
 
 	/* =========================================================
 	   MOBILE FOUNDATION

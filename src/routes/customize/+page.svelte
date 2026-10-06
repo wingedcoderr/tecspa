@@ -1,4 +1,18 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
+	import {
+		applySelectedFont,
+		clearSelectedFont,
+		deleteCustomFont,
+		getCustomFonts,
+		getSelectedFontId,
+		importCustomFont,
+		loadCustomFont,
+		setSelectedFontId,
+		type CustomFont
+	} from '$lib/fonts/font-manager';
+
 	import {
 		applyPresetTheme,
 		applyTheme,
@@ -13,6 +27,52 @@
 
 	let theme: ThemeSettings = loadTheme();
 
+	let customFonts: CustomFont[] = [];
+	let selectedCustomFontId: string | null = null;
+
+	let fontInput: HTMLInputElement | null = null;
+
+	let newFontName = '';
+	let fontError = '';
+	let fontStatus = '';
+	let fontsLoading = true;
+	let fontBusy = false;
+
+	onMount(async () => {
+		try {
+			customFonts = await getCustomFonts();
+
+			const selectedId = getSelectedFontId();
+
+			if (!selectedId) {
+				return;
+			}
+
+			const selectedFont = customFonts.find(
+				(font) => font.id === selectedId
+			);
+
+			if (!selectedFont) {
+				clearSelectedFont();
+				applySelectedFont(null);
+				return;
+			}
+
+			await loadCustomFont(selectedFont);
+
+			selectedCustomFontId = selectedFont.id;
+			applySelectedFont(selectedFont);
+		} catch (error) {
+			console.error('Could not load custom font:', error);
+
+			clearSelectedFont();
+			applySelectedFont(null);
+			selectedCustomFontId = null;
+		} finally {
+			fontsLoading = false;
+		}
+	});
+
 	function updateTheme() {
 		saveTheme(theme);
 		applyTheme(theme);
@@ -26,7 +86,8 @@
 
 	function selectPreset(preset: ThemePreset) {
 		theme = { ...preset.theme };
-applyPresetTheme(preset.id);
+
+		applyPresetTheme(preset.id);
 	}
 
 	function isActivePreset(preset: ThemePreset) {
@@ -37,9 +98,142 @@ applyPresetTheme(preset.id);
 		);
 	}
 
+	async function selectCustomFont(
+		font: CustomFont | null
+	) {
+		fontError = '';
+		fontStatus = '';
+
+		if (!font) {
+			clearSelectedFont();
+			applySelectedFont(null);
+			selectedCustomFontId = null;
+			fontStatus = 'Using the selected theme fonts.';
+			return;
+		}
+
+		fontBusy = true;
+
+		try {
+			await loadCustomFont(font);
+
+			setSelectedFontId(font.id);
+			applySelectedFont(font);
+
+			selectedCustomFontId = font.id;
+			fontStatus = `${font.name} is now active.`;
+		} catch (error) {
+			console.error('Could not apply custom font:', error);
+
+			fontError =
+				error instanceof Error
+					? error.message
+					: 'Could not apply the selected font.';
+		} finally {
+			fontBusy = false;
+		}
+	}
+
+	function openFontPicker() {
+		fontError = '';
+		fontStatus = '';
+		fontInput?.click();
+	}
+
+	async function handleFontFile(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+
+		if (!file) {
+			return;
+		}
+
+		fontError = '';
+		fontStatus = '';
+
+		const name = newFontName.trim();
+
+		if (!name) {
+			fontError = 'Please enter a name for the font.';
+			input.value = '';
+			return;
+		}
+
+		fontBusy = true;
+
+		try {
+			const font = await importCustomFont(file, name);
+
+			customFonts = [...customFonts, font].sort((a, b) =>
+				a.name.localeCompare(b.name)
+			);
+
+			newFontName = '';
+
+			await selectCustomFont(font);
+
+			fontStatus = `${font.name} was imported and activated.`;
+		} catch (error) {
+			console.error('Could not import custom font:', error);
+
+			fontError =
+				error instanceof Error
+					? error.message
+					: 'Could not import the selected font.';
+		} finally {
+			fontBusy = false;
+			input.value = '';
+		}
+	}
+
+	async function removeCustomFont(font: CustomFont) {
+		fontError = '';
+		fontStatus = '';
+
+		const wasSelected =
+			selectedCustomFontId === font.id;
+
+		fontBusy = true;
+
+		try {
+			await deleteCustomFont(font.id);
+
+			customFonts = customFonts.filter(
+				(item) => item.id !== font.id
+			);
+
+			if (wasSelected) {
+				selectedCustomFontId = null;
+				applySelectedFont(null);
+			}
+
+			fontStatus = `${font.name} was removed.`;
+		} catch (error) {
+			console.error('Could not delete custom font:', error);
+
+			fontError =
+				error instanceof Error
+					? error.message
+					: 'Could not delete the selected font.';
+		} finally {
+			fontBusy = false;
+		}
+	}
+
+	function resetCustomFont() {
+		clearSelectedFont();
+		applySelectedFont(null);
+		selectedCustomFontId = null;
+
+		fontError = '';
+		fontStatus = 'Custom font override cleared.';
+	}
+
 	function resetAll() {
 		resetTheme();
 		theme = { ...defaultTheme };
+
+		resetCustomFont();
 	}
 </script>
 
@@ -276,83 +470,263 @@ applyPresetTheme(preset.id);
 			</div>
 		</section>
 
-		<section class="customization-section">
-			<div class="section-heading">
-				<p class="section-number">03</p>
+		<section class="customization-section typography-section">
+	<div class="section-heading">
+		<p class="section-number">03</p>
 
-				<div>
-					<h2>typography</h2>
+		<div>
+			<h2>typography</h2>
 
-					<p>
-						Decide how TECSPA speaks visually.
-					</p>
+			<p>
+				Decide how TECSPA speaks visually.
+			</p>
+		</div>
+	</div>
+
+	<div class="controls">
+		<label class="text-control">
+			<span>heading font</span>
+
+			<select
+				bind:value={theme.headingFont}
+				onchange={updateTheme}
+			>
+				<option value='Georgia, "Times New Roman", serif'>
+					Georgia
+				</option>
+
+				<option value='"Times New Roman", Times, serif'>
+					Times New Roman
+				</option>
+
+				<option value="Garamond, Georgia, serif">
+					Garamond
+				</option>
+
+				<option value='"Courier New", Courier, monospace'>
+					Courier New
+				</option>
+
+				<option value="Arial, Helvetica, sans-serif">
+					Arial
+				</option>
+
+				<option value='"Trebuchet MS", Arial, sans-serif'>
+					Trebuchet MS
+				</option>
+			</select>
+		</label>
+
+		<label class="text-control">
+			<span>body font</span>
+
+			<select
+				bind:value={theme.bodyFont}
+				onchange={updateTheme}
+			>
+				<option value='Georgia, "Times New Roman", serif'>
+					Georgia
+				</option>
+
+				<option value='"Times New Roman", Times, serif'>
+					Times New Roman
+				</option>
+
+				<option value='"Courier New", Courier, monospace'>
+					Courier New
+				</option>
+
+				<option value="Arial, Helvetica, sans-serif">
+					Arial
+				</option>
+
+				<option value='"Trebuchet MS", Arial, sans-serif'>
+					Trebuchet MS
+				</option>
+			</select>
+		</label>
+	</div>
+
+	<div class="font-accessibility-panel">
+		<div class="font-accessibility-heading">
+			<div>
+				<h3>accessibility & custom fonts</h3>
+
+				<p>
+					Use a locally stored font across TECSPA without changing
+					your theme's normal typography settings.
+				</p>
+			</div>
+
+			<span class="font-local-badge">
+				local only
+			</span>
+		</div>
+
+		<label class="text-control font-override-control">
+			<span>custom font override</span>
+
+			<select
+				value={selectedCustomFontId ?? ''}
+				disabled={fontsLoading || fontBusy}
+				onchange={(event) => {
+					const value = (
+						event.currentTarget as HTMLSelectElement
+					).value;
+
+					const font =
+						customFonts.find(
+							(item) => item.id === value
+						) ?? null;
+
+					void selectCustomFont(font);
+				}}
+			>
+				<option value="">
+					use theme fonts
+				</option>
+
+				{#each customFonts as font}
+					<option value={font.id}>
+						{font.name}
+					</option>
+				{/each}
+			</select>
+		</label>
+
+		{#if selectedCustomFontId}
+			<div class="font-preview">
+				<span class="font-preview-label">
+					active font
+				</span>
+
+				<strong>
+					{customFonts.find(
+						(font) => font.id === selectedCustomFontId
+					)?.name ?? 'Custom font'}
+				</strong>
+
+				<p>
+					The custom font currently overrides both headings
+					and body text throughout TECSPA.
+				</p>
+			</div>
+		{/if}
+
+		<div class="font-import-box">
+			<div class="font-import-copy">
+				<h3>import a font</h3>
+
+				<p>
+					Add a font file from your computer. TECSPA supports
+					WOFF2, WOFF, TTF, and OTF fonts.
+				</p>
+			</div>
+
+			<div class="font-import-controls">
+				<input
+					class="font-name-input"
+					type="text"
+					bind:value={newFontName}
+					placeholder="Font name, e.g. OpenDyslexic"
+					aria-label="Name for imported font"
+					disabled={fontBusy}
+				/>
+
+				<button
+					type="button"
+					class="font-action-button"
+					onclick={openFontPicker}
+					disabled={fontBusy || !newFontName.trim()}
+				>
+					{fontBusy ? 'working…' : 'choose font file'}
+				</button>
+
+				<input
+					bind:this={fontInput}
+					class="hidden-font-input"
+					type="file"
+					accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf"
+					onchange={handleFontFile}
+				/>
+			</div>
+		</div>
+
+		{#if customFonts.length > 0}
+			<div class="custom-font-list">
+				<div class="custom-font-list-heading">
+					<span>your imported fonts</span>
+					<span>{customFonts.length}</span>
 				</div>
-			</div>
 
-			<div class="controls">
-				<label class="text-control">
-					<span>heading font</span>
-
-					<select
-						bind:value={theme.headingFont}
-						onchange={updateTheme}
+				{#each customFonts as font}
+					<div
+						class:active={selectedCustomFontId === font.id}
+						class="custom-font-item"
 					>
-						<option value='Georgia, "Times New Roman", serif'>
-							Georgia
-						</option>
+						<div
+							class="custom-font-info"
+							style={`font-family: "${font.name}";`}
+						>
+							<strong>{font.name}</strong>
 
-						<option value='"Times New Roman", Times, serif'>
-							Times New Roman
-						</option>
+							<span>
+								{font.fileName} · {font.format.toUpperCase()}
+							</span>
 
-						<option value="Garamond, Georgia, serif">
-							Garamond
-						</option>
+							<p>
+								The quick brown fox jumps over the lazy dog.
+							</p>
+						</div>
 
-						<option value='"Courier New", Courier, monospace'>
-							Courier New
-						</option>
+						<div class="custom-font-actions">
+							<button
+								type="button"
+								class="font-action-button secondary"
+								disabled={fontBusy}
+								onclick={() => void selectCustomFont(font)}
+							>
+								{selectedCustomFontId === font.id
+									? 'active'
+									: 'use'}
+							</button>
 
-						<option value="Arial, Helvetica, sans-serif">
-							Arial
-						</option>
-
-						<option value='"Trebuchet MS", Arial, sans-serif'>
-							Trebuchet MS
-						</option>
-					</select>
-				</label>
-
-				<label class="text-control">
-					<span>body font</span>
-
-					<select
-						bind:value={theme.bodyFont}
-						onchange={updateTheme}
-					>
-						<option value='Georgia, "Times New Roman", serif'>
-							Georgia
-						</option>
-
-						<option value='"Times New Roman", Times, serif'>
-							Times New Roman
-						</option>
-
-						<option value='"Courier New", Courier, monospace'>
-							Courier New
-						</option>
-
-						<option value="Arial, Helvetica, sans-serif">
-							Arial
-						</option>
-
-						<option value='"Trebuchet MS", Arial, sans-serif'>
-							Trebuchet MS
-						</option>
-					</select>
-				</label>
+							<button
+								type="button"
+								class="font-delete-button"
+								disabled={fontBusy}
+								onclick={() => void removeCustomFont(font)}
+							>
+								delete
+							</button>
+						</div>
+					</div>
+				{/each}
 			</div>
-		</section>
+		{/if}
+
+		{#if fontError}
+			<div class="font-message error" role="alert">
+				{fontError}
+			</div>
+		{/if}
+
+		{#if fontStatus}
+			<div class="font-message success" role="status">
+				{fontStatus}
+			</div>
+		{/if}
+
+		<button
+			type="button"
+			class="reset-font-button"
+			onclick={resetCustomFont}
+			disabled={fontBusy || !selectedCustomFontId}
+		>
+			reset custom font
+		</button>
+	</div>
+</section>
 
 		<section class="customization-section">
 			<div class="section-heading">
@@ -911,6 +1285,418 @@ applyPresetTheme(preset.id);
 		font-family: inherit;
 
 		cursor: pointer;
+	}
+
+	.font-accessibility-panel {
+		margin-top: 24px;
+		padding: 22px;
+
+		background:
+			var(--tecspa-surface-alt);
+
+		border:
+			1px solid
+			var(--tecspa-border);
+	}
+
+	.font-accessibility-heading {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 20px;
+
+		margin-bottom: 18px;
+	}
+
+	.font-accessibility-heading h3,
+	.font-import-copy h3 {
+		margin: 0;
+
+		color: var(--tecspa-accent-dark);
+
+		font-family:
+			var(--tecspa-heading-font);
+
+		font-size: 1.1rem;
+		font-weight: 500;
+	}
+
+	.font-accessibility-heading p,
+	.font-import-copy p {
+		margin: 7px 0 0;
+
+		max-width: 650px;
+
+		color: var(--tecspa-text-muted);
+
+		font-size: 0.8rem;
+		line-height: 1.55;
+	}
+
+	.font-local-badge {
+		flex-shrink: 0;
+
+		padding: 4px 8px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		color:
+			var(--tecspa-text-muted);
+
+		font-size: 0.62rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.font-override-control {
+		margin-bottom: 14px;
+	}
+
+	.font-preview {
+		padding: 18px;
+
+		margin-bottom: 14px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		background:
+			var(--tecspa-surface);
+
+		color:
+			var(--tecspa-text);
+	}
+
+	.font-preview-label {
+		display: block;
+
+		margin-bottom: 7px;
+
+		color:
+			var(--tecspa-text-muted);
+
+		font-family:
+			var(--tecspa-body-font);
+
+		font-size: 0.65rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	.font-preview strong {
+		display: block;
+
+		color:
+			var(--tecspa-accent-dark);
+
+		font-size: 1.45rem;
+		font-weight: 500;
+	}
+
+	.font-preview p {
+		margin: 8px 0 0;
+
+		color:
+			var(--tecspa-text-muted);
+
+		font-size: 0.8rem;
+		line-height: 1.55;
+	}
+
+	.font-import-box {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
+		gap: 20px;
+
+		padding: 18px;
+
+		border:
+			1px dashed
+			var(--tecspa-border);
+
+		background:
+			color-mix(
+				in srgb,
+				var(--tecspa-surface) 60%,
+				transparent
+			);
+	}
+
+	.font-import-controls {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.font-name-input {
+		width: 100%;
+		min-width: 0;
+
+		padding: 9px 11px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		background:
+			var(--tecspa-surface);
+
+		color:
+			var(--tecspa-text);
+
+		font-family:
+			var(--tecspa-body-font);
+
+		font-size: 0.8rem;
+
+		outline: none;
+	}
+
+	.font-name-input:focus {
+		border-color:
+			var(--tecspa-accent);
+	}
+
+	.font-action-button,
+	.font-delete-button,
+	.reset-font-button {
+		flex-shrink: 0;
+
+		padding: 9px 12px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		background:
+			var(--tecspa-surface);
+
+		color:
+			var(--tecspa-accent-dark);
+
+		font-family:
+			var(--tecspa-body-font);
+
+		font-size: 0.72rem;
+
+		cursor: pointer;
+
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			opacity 0.18s ease;
+	}
+
+	.font-action-button:hover:not(:disabled),
+	.font-delete-button:hover:not(:disabled),
+	.reset-font-button:hover:not(:disabled) {
+		border-color:
+			var(--tecspa-accent);
+
+		background:
+			var(--tecspa-surface-alt);
+	}
+
+	.font-action-button.secondary {
+		min-width: 55px;
+	}
+
+	.font-delete-button {
+		color:
+			var(--tecspa-text-muted);
+	}
+
+	.font-action-button:disabled,
+	.font-delete-button:disabled,
+	.reset-font-button:disabled,
+	.font-name-input:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.hidden-font-input {
+		display: none;
+	}
+
+	.custom-font-list {
+		display: grid;
+		gap: 8px;
+
+		margin-top: 14px;
+	}
+
+	.custom-font-list-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+
+		padding: 4px 2px;
+
+		color:
+			var(--tecspa-text-muted);
+
+		font-size: 0.68rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	.custom-font-list-heading span:last-child {
+		padding: 2px 7px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		font-size: 0.6rem;
+	}
+
+	.custom-font-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 18px;
+
+		padding: 15px 16px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		background:
+			var(--tecspa-surface);
+
+		transition:
+			border-color 0.18s ease,
+			background 0.18s ease;
+	}
+
+	.custom-font-item.active {
+		border-color:
+			var(--tecspa-accent);
+
+		background:
+			color-mix(
+				in srgb,
+				var(--tecspa-accent) 5%,
+				var(--tecspa-surface)
+			);
+	}
+
+	.custom-font-info {
+		min-width: 0;
+	}
+
+	.custom-font-info strong {
+		display: block;
+
+		color:
+			var(--tecspa-accent-dark);
+
+		font-size: 1.1rem;
+		font-weight: 500;
+	}
+
+	.custom-font-info > span {
+		display: block;
+
+		margin-top: 3px;
+
+		color:
+			var(--tecspa-text-muted);
+
+		font-family:
+			var(--tecspa-body-font);
+
+		font-size: 0.62rem;
+		letter-spacing: 0.04em;
+	}
+
+	.custom-font-info p {
+		margin: 9px 0 0;
+
+		color:
+			var(--tecspa-text);
+
+		font-size: 0.85rem;
+		line-height: 1.5;
+	}
+
+	.custom-font-actions {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+
+	.font-message {
+		margin-top: 12px;
+
+		padding: 10px 12px;
+
+		border:
+			1px solid
+			var(--tecspa-border);
+
+		font-size: 0.75rem;
+		line-height: 1.45;
+	}
+
+	.font-message.error {
+		border-color:
+			color-mix(
+				in srgb,
+				var(--tecspa-accent) 55%,
+				var(--tecspa-border)
+			);
+
+		color:
+			var(--tecspa-text);
+	}
+
+	.font-message.success {
+		color:
+			var(--tecspa-text-muted);
+	}
+
+	.reset-font-button {
+		display: block;
+
+		margin-top: 14px;
+		margin-left: auto;
+	}
+
+	@media (max-width: 700px) {
+		.font-import-box {
+			grid-template-columns: 1fr;
+		}
+
+		.font-import-controls {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.font-action-button {
+			width: 100%;
+		}
+
+		.custom-font-item {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+
+		.custom-font-actions {
+			width: 100%;
+		}
+
+		.custom-font-actions button {
+			flex: 1;
+		}
+
+		.font-accessibility-heading {
+			flex-direction: column;
+		}
 	}
 
 	.actions {
