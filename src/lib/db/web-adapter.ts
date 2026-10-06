@@ -68,6 +68,55 @@ export class WebDataAdapter implements DataAdapter {
 		return withWebMediaUrls(member);
 	}
 
+async deleteMember(id: string): Promise<void> {
+	const response = await fetch(
+		`/api/members/${encodeURIComponent(id)}`,
+		{
+			method: 'DELETE'
+		}
+	);
+
+	if (!response.ok) {
+		const data =
+			await response.json().catch(() => null);
+
+		throw new Error(
+			data?.error ??
+				`Failed to delete member: ${response.status} ${response.statusText}`
+		);
+	}
+}
+
+async updateMember(
+	id: string,
+	member: Member
+): Promise<Member> {
+	const response = await fetch(
+		`/api/members/${encodeURIComponent(id)}`,
+		{
+			method: 'PATCH',
+			headers: {
+				'Content-Type':
+					'application/json'
+			},
+			body: JSON.stringify(member)
+		}
+	);
+
+	const data =
+		await response.json().catch(() => null);
+
+	if (!response.ok) {
+		throw new Error(
+			data?.error ??
+				`Failed to update member: ${response.status} ${response.statusText}`
+		);
+	}
+
+	return data.member ?? member;
+}
+
+
 	async importAmpersandData(
 		importData: AmpersandImportData
 	): Promise<AmpersandImportResult> {

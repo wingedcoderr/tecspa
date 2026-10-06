@@ -3,13 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 
-import { getDataAdapter } from '$lib/db/data-adapter';
+	import { getDataAdapter } from '$lib/db/data-adapter';
+	import { isDesktop } from '$lib/platform';
 
-import { updateMember } from '$lib/repositories/members';
-	import {
-		memberImageUrl,
-		selectAndStoreMemberImage
-	} from '$lib/media/member-media';
 	import type { Member } from '$lib/data/members';
 
 	let member: Member | null = null;
@@ -30,22 +26,22 @@ import { updateMember } from '$lib/repositories/members';
 
 	let loading = true;
 	let saving = false;
-
 	let errorMessage = '';
-let customFields: Member['customFields'] = [];
+
+	let customFields: Member['customFields'] = [];
 
 	const memberId = page.url.searchParams.get('id');
 
-onMount(async () => {
-	try {
-		const dataAdapter = getDataAdapter();
+	onMount(async () => {
+		try {
+			const adapter = getDataAdapter();
 
-		if (!memberId) {
+			if (!memberId) {
 				errorMessage = 'No member ID was provided.';
 				return;
 			}
 
-			member = await dataAdapter.getMemberById(memberId);
+			member = await adapter.getMemberById(memberId);
 
 			if (!member) {
 				errorMessage = 'Member not found.';
@@ -65,12 +61,20 @@ onMount(async () => {
 			banner = member.banner ?? '';
 			customFields = member.customFields ?? [];
 
-			if (avatar) {
-				avatarPreview = await memberImageUrl(avatar);
-			}
+			if (isDesktop()) {
+				const { memberImageUrl } =
+					await import('$lib/media/member-media');
 
-			if (banner) {
-				bannerPreview = await memberImageUrl(banner);
+				if (avatar) {
+					avatarPreview = await memberImageUrl(avatar);
+				}
+
+				if (banner) {
+					bannerPreview = await memberImageUrl(banner);
+				}
+			} else {
+				avatarPreview = avatar;
+				bannerPreview = banner;
 			}
 		} catch (error) {
 			console.error('Failed to load member:', error);
@@ -121,6 +125,60 @@ onMount(async () => {
 		);
 	}
 
+	function selectImageFile(kind: 'avatar' | 'banner'): Promise<string | null> {
+		return new Promise((resolve) => {
+			const input = document.createElement('input');
+
+			input.type = 'file';
+			input.accept =
+				'image/png,image/jpeg,image/gif,image/webp,image/bmp';
+
+			input.onchange = () => {
+				const file = input.files?.[0];
+
+				if (!file) {
+					resolve(null);
+					return;
+				}
+
+				if (!file.type.startsWith('image/')) {
+					errorMessage = 'Please choose an image file.';
+					resolve(null);
+					return;
+				}
+
+				if (file.size > 10 * 1024 * 1024) {
+					errorMessage = 'Image must be smaller than 10 MB.';
+					resolve(null);
+					return;
+				}
+
+				const reader = new FileReader();
+
+				reader.onload = () => {
+					const result = reader.result;
+
+					if (typeof result !== 'string') {
+						errorMessage = 'Could not read the selected image.';
+						resolve(null);
+						return;
+					}
+
+					resolve(result);
+				};
+
+				reader.onerror = () => {
+					errorMessage = 'Could not read the selected image.';
+					resolve(null);
+				};
+
+				reader.readAsDataURL(file);
+			};
+
+			input.click();
+		});
+	}
+
 	async function chooseImage(kind: 'avatar' | 'banner') {
 		if (!member) {
 			return;
@@ -128,7 +186,28 @@ onMount(async () => {
 
 		errorMessage = '';
 
+		if (!isDesktop()) {
+			const dataUrl = await selectImageFile(kind);
+
+			if (!dataUrl) {
+				return;
+			}
+
+			if (kind === 'avatar') {
+				avatar = dataUrl;
+				avatarPreview = dataUrl;
+			} else {
+				banner = dataUrl;
+				bannerPreview = dataUrl;
+			}
+
+			return;
+		}
+
 		try {
+			const { selectAndStoreMemberImage } =
+				await import('$lib/media/member-media');
+
 			const storedImage = await selectAndStoreMemberImage(
 				member.id,
 				kind,
@@ -157,55 +236,61 @@ onMount(async () => {
 	}
 
 	async function saveMember() {
-		if (!member || saving) {
+		if (!member) {
 			return;
 		}
 
-		errorMessage = '';
-
-		if (!name.trim()) {
-			errorMessage = 'Please give this member a name.';
-			return;
-		}
+		const memberId = member.id;
 
 		saving = true;
+		errorMessage = '';
 
 		try {
+			const adapter = getDataAdapter();
 
 			const updatedMember: Member = {
-				id: member.id,
+				...member,
 				name: name.trim(),
 				pronouns: pronouns.trim(),
 				aliases: aliases
 					.split(',')
-					.map((item) => item.trim())
+					.map((value) => value.trim())
 					.filter(Boolean),
-				role: role.trim() || 'member',
-				status: status.trim() || 'active',
+				role,
+				status,
 				about: about.trim(),
 				interests: interests
 					.split(',')
-					.map((item) => item.trim())
+					.map((value) => value.trim())
 					.filter(Boolean),
 				frontTriggers: frontTriggers
 					.split(',')
-					.map((item) => item.trim())
+					.map((value) => value.trim())
 					.filter(Boolean),
 				avatar,
 				banner,
-				isFronting: member.isFronting,
-				customFields
+				customFields: customFields.map((field, index) => ({
+					...field,
+					memberId,
+					sortOrder: index
+				}))
 			};
 
-			await updateMember(updatedMember.id, updatedMember);
-			await goto(`/members/${updatedMember.id}`);
+			const savedMember = await adapter.updateMember(
+				memberId,
+				updatedMember
+			);
+
+			member = savedMember;
+
+			goto(`/members/${memberId}`);
 		} catch (error) {
-			console.error('Failed to update member:', error);
+			console.error('Failed to save member:', error);
 
 			errorMessage =
 				error instanceof Error
 					? error.message
-					: 'Could not update this member.';
+					: 'Could not save this member.';
 		} finally {
 			saving = false;
 		}

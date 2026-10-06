@@ -4,16 +4,12 @@ console.log('PROFILE FILE LOADED');
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 import Markdown from '$lib/components/Markdown.svelte';
-
+import { isDesktop } from '$lib/platform';
 	import { getDataAdapter } from '$lib/db/data-adapter';
-	import { isDesktop } from '$lib/platform';
 
-import { deleteMember } from '$lib/repositories/members';
-
-	import {
-		deleteMemberMedia,
-		memberImageUrl
-	} from '$lib/media/member-media';
+import {
+	memberImageUrl
+} from '$lib/media/member-media';
 
 	import type { Member } from '$lib/data/members';
 
@@ -121,41 +117,43 @@ if (loadedMember.banner) {
 	});
 
 	async function handleDelete() {
-		if (!member || deleting) {
-			return;
-		}
+	if (!member || deleting) {
+		return;
+	}
 
-		const confirmed = window.confirm(
-			`Delete "${member.name}"?\n\nThis will permanently remove this member from TECSPA.`
+	const confirmed = window.confirm(
+		`Delete "${member.name}"?\n\nThis will permanently remove this member from TECSPA.`
+	);
+
+	if (!confirmed) {
+		return;
+	}
+
+	deleting = true;
+	errorMessage = '';
+
+	try {
+		const dataAdapter = getDataAdapter();
+
+		await dataAdapter.deleteMember(
+			member.id
 		);
 
-		if (!confirmed) {
-			return;
-		}
+		await goto('/members');
+	} catch (error) {
+		console.error(
+			'Failed to delete member:',
+			error
+		);
 
-		deleting = true;
-		errorMessage = '';
-
-		try {
-
-			await deleteMemberMedia(member);
-			await deleteMember(member.id);
-
-			await goto('/members');
-		} catch (error) {
-			console.error(
-				'Failed to delete member:',
-				error
-			);
-
-			errorMessage =
-				error instanceof Error
-					? error.message
-					: 'Could not delete this member.';
-		} finally {
-			deleting = false;
-		}
+		errorMessage =
+			error instanceof Error
+				? error.message
+				: 'Could not delete this member.';
+	} finally {
+		deleting = false;
 	}
+}
 </script>
 
 <svelte:head>

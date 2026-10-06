@@ -84,6 +84,100 @@ export class DesktopDataAdapter implements DataAdapter {
 
 		return rows[0] ?? null;
 	}
+
+async deleteMember(id: string): Promise<void> {
+	const db = await initializeDatabase();
+
+	await db.execute(
+		'DELETE FROM members WHERE id = $1',
+		[id]
+	);
+}
+
+async updateMember(
+	id: string,
+	member: Member
+): Promise<Member> {
+	const db = await initializeDatabase();
+
+	await db.execute(
+		`
+			UPDATE members
+			SET
+				name = $1,
+				pronouns = $2,
+				aliases = $3,
+				role = $4,
+				status = $5,
+				about = $6,
+				interests = $7,
+				front_triggers = $8,
+				avatar = $9,
+				banner = $10,
+				is_fronting = $11
+			WHERE id = $12
+		`,
+		[
+			member.name,
+			member.pronouns,
+			JSON.stringify(member.aliases),
+			member.role,
+			member.status,
+			member.about,
+			JSON.stringify(member.interests),
+			JSON.stringify(member.frontTriggers),
+			member.avatar,
+			member.banner,
+			member.isFronting ? 1 : 0,
+			id
+		]
+	);
+
+	await db.execute(
+		`
+			DELETE FROM custom_fields
+			WHERE member_id = $1
+		`,
+		[id]
+	);
+
+	for (const field of member.customFields ?? []) {
+		await db.execute(
+			`
+				INSERT INTO custom_fields (
+					id,
+					member_id,
+					label,
+					type,
+					value,
+					description,
+					sort_order
+				)
+				VALUES (
+					$1,
+					$2,
+					$3,
+					$4,
+					$5,
+					$6,
+					$7
+				)
+			`,
+			[
+				field.id,
+				id,
+				field.label,
+				field.type,
+				field.value,
+				field.description,
+				field.sortOrder
+			]
+		);
+	}
+
+	return member;
+}
+
 async setMemberFronting(
 	memberId: string,
 	isFronting: boolean
