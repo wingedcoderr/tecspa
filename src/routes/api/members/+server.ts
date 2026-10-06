@@ -153,20 +153,16 @@ export const POST: RequestHandler = async ({
 	const { system } =
 		await getAuthenticatedSystem(cookies);
 
-	let body: {
-		member?: Partial<Member>;
-	};
+	let input: Partial<Member>;
 
-	try {
-		body = await request.json();
-	} catch {
-		throw error(
-			400,
-			'Invalid request body.'
-		);
-	}
-
-	const input = body.member;
+try {
+	input = await request.json();
+} catch {
+	throw error(
+		400,
+		'Invalid request body.'
+	);
+}
 
 	if (
 		!input ||
