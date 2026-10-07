@@ -236,18 +236,20 @@
 	}
 
 	async function confirmImport() {
-		if (
-			importSource === 'pluralspace'
-		) {
-			errorMessage =
-				'PluralSpace preview is ready. The database import step is next.';
+		if (importing || importComplete) {
 			return;
 		}
 
 		if (
-			!importData ||
-			importing ||
-			importComplete
+			importSource === 'pluralspace' &&
+			!pluralSpaceData
+		) {
+			return;
+		}
+
+		if (
+			importSource === 'ampersand' &&
+			!importData
 		) {
 			return;
 		}
@@ -259,10 +261,25 @@
 			const dataAdapter =
 				getDataAdapter();
 
-			importResult =
-				await dataAdapter.importAmpersandData(
-					importData
-				);
+			if (importSource === 'pluralspace') {
+				if (!pluralSpaceData) {
+					return;
+				}
+
+				importResult =
+					await dataAdapter.importPluralSpaceData(
+						pluralSpaceData
+					);
+			} else {
+				if (!importData) {
+					return;
+				}
+
+				importResult =
+					await dataAdapter.importAmpersandData(
+						importData
+					);
+			}
 
 			importComplete = true;
 		} catch (error) {
@@ -466,14 +483,6 @@
 	</button>
 </div>
 
-			<button
-				class="secondary-button"
-				type="button"
-				onclick={selectAmpersandExport}
-				disabled={loading}
-			>
-				{loading ? 'Reading…' : 'Choose JSON'}
-			</button>
 		</div>
 
 		{#if errorMessage}
@@ -955,16 +964,46 @@
 			</div>
 		{/if}
 
-		<div class="import-note">
-			<strong>
-				PluralSpace export parsed successfully.
-			</strong>
+		{#if importComplete && importResult}
+			<div class="success-box import-complete-box">
+				<div class="success-icon">✓</div>
 
-			<p>
-				The file is safe to review. The next step is connecting
-				this normalized data to TECSPA's database import pipeline.
-			</p>
-		</div>
+				<div>
+					<strong>
+						{importResult.memberCount}
+						{importResult.memberCount === 1
+							? ' member'
+							: ' members'}
+						imported successfully.
+					</strong>
+
+					<p>
+						{importResult.frontHistoryCount}
+						fronting history entries and
+						{importResult.imageCount}
+						avatars /
+						{importResult.bannerCount}
+						banners were imported into TECSPA.
+					</p>
+
+					<p>
+						Your imported members are now stored in the
+						TECSPA database.
+					</p>
+				</div>
+			</div>
+		{:else}
+			<div class="import-note">
+				<strong>
+					PluralSpace export parsed successfully.
+				</strong>
+
+				<p>
+					Review the preview above, then click Import System
+					to add this system to TECSPA.
+				</p>
+			</div>
+		{/if}
 
 		<div class="actions">
 			<button
@@ -980,9 +1019,15 @@
 				class="primary-button"
 				type="button"
 				onclick={confirmImport}
-				disabled={importing}
+				disabled={importing || importComplete}
 			>
-				Database Import — Next Step
+				{#if importing}
+					Importing…
+				{:else if importComplete}
+					Imported ✓
+				{:else}
+					Import System
+				{/if}
 			</button>
 		</div>
 	</section>
