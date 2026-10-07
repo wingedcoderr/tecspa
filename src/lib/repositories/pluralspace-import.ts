@@ -8,7 +8,32 @@ import type { AmpersandImportResult } from '$lib/repositories/ampersand-import';
 
 import { getDatabase } from '$lib/db/database';
 
+async function storeMemberImage(
+	memberId: string,
+	kind: 'avatar' | 'banner',
+	dataUri: string
+): Promise<string> {
+	const image = dataUriParts(dataUri);
 
+	if (!image) {
+		return '';
+	}
+
+	const mediaModule = await withImportTimeout(
+		import('$lib/media/member-media'),
+		'loading the member media module'
+	);
+
+	return withImportTimeout(
+		mediaModule.storeEmbeddedMemberImage(
+			memberId,
+			kind,
+			dataUri,
+			image.mimeType
+		),
+		`storing ${kind} media`
+	);
+}
 
 function dataUriParts(value: string): {
 
@@ -123,53 +148,30 @@ function extensionForMimeType(mimeType: string): string {
 
 
 function withImportTimeout<T>(
-    promise: Promise<T>,
-    stage: string,
-    timeoutMs = 5000
+	promise: Promise<T>,
+	stage: string,
+	timeoutMs = 5000
 ): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error(`PluralSpace import timed out during ${stage}.`));
-        }, timeoutMs);
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			reject(
+				new Error(
+					`PluralSpace import timed out during ${stage}.`
+				)
+			);
+		}, timeoutMs);
 
-        promise.then(
-            (value) => {
-                clearTimeout(timer);
-                resolve(value);
-            },
-            (error) => {
-                clearTimeout(timer);
-                reject(error);
-            }
-        );
-    });
-}
-
-async function storeMemberImage(
-    memberId: string,
-    kind: 'avatar' | 'banner',
-    dataUri: string
-): Promise<string> {
-    const image = dataUriParts(dataUri);
-
-    if (!image) {
-        return '';
-    }
-
-    const { storeEmbeddedMemberImage } = await withImportTimeout(
-        import('$lib/media/member-media'),
-        'loading the member media module'
-    );
-
-    return withImportTimeout(
-        storeEmbeddedMemberImage(
-            memberId,
-            kind,
-            dataUri,
-            image.mimeType
-        ),
-        `storing ${kind} media`
-    );
+		promise.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error) => {
+				clearTimeout(timer);
+				reject(error);
+			}
+		);
+	});
 }
 
 function remapMember(
@@ -262,7 +264,8 @@ export async function importPluralSpaceData(
      * filesystem commands can leave the desktop import waiting indefinitely.
      */
     try {
-        for (const sourceMember of importData.members) {
+        for (let memberIndex = 0; memberIndex < importData.members.length; memberIndex += 1) {
+	const sourceMember = importData.members[memberIndex];
             const id = memberIdMap.get(sourceMember.id);
 
             if (!id) {
@@ -272,11 +275,14 @@ export async function importPluralSpaceData(
             const member = remapMember(sourceMember, id);
 
             if (sourceMember.avatar?.startsWith('data:')) {
-                member.avatar = await storeMemberImage(
-                    id,
-                    'avatar',
-                    sourceMember.avatar
-                );
+                member.avatar = await withImportTimeout(
+	storeMemberImage(
+                    		id,
+		'avatar',
+		sourceMember.avatar
+	),
+	`storing avatar for member ${memberIndex + 1}`
+);
 
                 if (member.avatar) {
                     imageCount += 1;
@@ -284,10 +290,13 @@ export async function importPluralSpaceData(
             }
 
             if (sourceMember.banner?.startsWith('data:')) {
-                member.banner = await storeMemberImage(
-                    id,
-                    'banner',
-                    sourceMember.banner
+                member.banner = await withImportTimeout(
+                    storeMemberImage(
+                        id,
+                        'banner',
+                        sourceMember.banner
+                    ),
+                    `storing banner for member ${memberIndex + 1}`
                 );
 
                 if (member.banner) {
@@ -298,15 +307,14 @@ export async function importPluralSpaceData(
             createdMembers.push(member);
         }
 
-        const db = await withImportTimeout(
-            getDatabase(),
-            'opening the SQLite database'
-        );
-
+       const db = await withImportTimeout(
+	getDatabase(),
+	'opening the SQLite database'
+);
         await withImportTimeout(
-            db.execute('BEGIN'),
-            'starting the SQLite transaction'
-        );
+	db.execute('BEGIN'),
+	'starting the SQLite transaction'
+);
 
         try {
             for (const member of createdMembers) {
