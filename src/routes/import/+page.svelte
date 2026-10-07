@@ -2,15 +2,27 @@
 	import { browser } from '$app/environment';
 	import { isDesktop } from '$lib/platform';
 
-	import { parseAmpersandExport } from '$lib/importers/ampersand';
-	import type { AmpersandImportData } from '$lib/importers/ampersand';
+	import {
+		parseAmpersandExport,
+		type AmpersandImportData
+	} from '$lib/importers/ampersand';
+
+	import {
+		parsePluralSpaceExport,
+		type PluralSpaceImportData
+	} from '$lib/importers/pluralspace';
 
 	import type { AmpersandImportResult } from '$lib/repositories/ampersand-import';
 	import { getDataAdapter } from '$lib/db/data-adapter';
 
+	type ImportSource = 'ampersand' | 'pluralspace';
+
+	let importSource: ImportSource = 'ampersand';
+
 	let selectedFile = '';
 
 	let importData: AmpersandImportData | null = null;
+	let pluralSpaceData: PluralSpaceImportData | null = null;
 
 	let loading = false;
 	let importing = false;
@@ -20,136 +32,259 @@
 	let importComplete = false;
 	let importResult: AmpersandImportResult | null = null;
 
+	function resetImportState() {
+		selectedFile = '';
+		importData = null;
+		pluralSpaceData = null;
+
+		errorMessage = '';
+
+		importComplete = false;
+		importResult = null;
+	}
+
+	function selectSource(source: ImportSource) {
+		if (loading || importing) {
+			return;
+		}
+
+		importSource = source;
+		resetImportState();
+	}
+
 	async function selectAmpersandExport() {
-	errorMessage = '';
-	importData = null;
-	selectedFile = '';
+		resetImportState();
 
-	importComplete = false;
-	importResult = null;
-
-	if (isDesktop()) {
-		const { open } = await import(
-			'@tauri-apps/plugin-dialog'
-		);
-
-		const { readTextFile } = await import(
-			'@tauri-apps/plugin-fs'
-		);
-
-		const selected = await open({
-			multiple: false,
-			directory: false,
-			filters: [
-				{
-					name: 'JSON files',
-					extensions: ['json']
-				}
-			]
-		});
-
-		if (typeof selected !== 'string') {
-			return;
-		}
-
-		selectedFile = selected;
-		loading = true;
-
-		try {
-			const json =
-				await readTextFile(selected);
-
-			importData =
-				parseAmpersandExport(json);
-		} catch (error) {
-			errorMessage =
-				error instanceof Error
-					? error.message
-					: 'The selected file could not be imported.';
-		} finally {
-			loading = false;
-		}
-
-		return;
-	}
-
-	if (!browser) {
-		return;
-	}
-
-	const input = document.createElement('input');
-
-	input.type = 'file';
-	input.accept = '.json,application/json';
-
-	input.onchange = async () => {
-		const file = input.files?.[0];
-
-		if (!file) {
-			return;
-		}
-
-		selectedFile = file.name;
-		loading = true;
-
-		try {
-			const json = await file.text();
-
-			importData =
-				parseAmpersandExport(json);
-		} catch (error) {
-			errorMessage =
-				error instanceof Error
-					? error.message
-					: 'The selected file could not be imported.';
-		} finally {
-			loading = false;
-		}
-	};
-
-	input.click();
-}
-
-	async function confirmImport() {
-	if (!importData || importing || importComplete) {
-		return;
-	}
-
-	errorMessage = '';
-	importing = true;
-
-	try {
-		const dataAdapter =
-			getDataAdapter();
-
-		importResult =
-			await dataAdapter.importAmpersandData(
-				importData
+		if (isDesktop()) {
+			const { open } = await import(
+				'@tauri-apps/plugin-dialog'
 			);
 
-		importComplete = true;
-	} catch (error) {
-		errorMessage =
-			error instanceof Error
-				? error.message
-				: 'The system could not be imported.';
-	} finally {
-		importing = false;
+			const { readTextFile } = await import(
+				'@tauri-apps/plugin-fs'
+			);
+
+			const selected = await open({
+				multiple: false,
+				directory: false,
+				filters: [
+					{
+						name: 'JSON files',
+						extensions: ['json']
+					}
+				]
+			});
+
+			if (typeof selected !== 'string') {
+				return;
+			}
+
+			selectedFile = selected;
+			loading = true;
+
+			try {
+				const json =
+					await readTextFile(selected);
+
+				importData =
+					parseAmpersandExport(json);
+			} catch (error) {
+				errorMessage =
+					error instanceof Error
+						? error.message
+						: 'The selected file could not be imported.';
+			} finally {
+				loading = false;
+			}
+
+			return;
+		}
+
+		if (!browser) {
+			return;
+		}
+
+		const input =
+			document.createElement('input');
+
+		input.type = 'file';
+		input.accept =
+			'.json,application/json';
+
+		input.onchange = async () => {
+			const file =
+				input.files?.[0];
+
+			if (!file) {
+				return;
+			}
+
+			selectedFile = file.name;
+			loading = true;
+
+			try {
+				const json =
+					await file.text();
+
+				importData =
+					parseAmpersandExport(json);
+			} catch (error) {
+				errorMessage =
+					error instanceof Error
+						? error.message
+						: 'The selected file could not be imported.';
+			} finally {
+				loading = false;
+			}
+		};
+
+		input.click();
 	}
-}
 
-function clearImport() {
-	selectedFile = '';
-	importData = null;
-	errorMessage = '';
+	async function selectPluralSpaceExport() {
+		resetImportState();
 
-	importComplete = false;
-	importResult = null;
-}
+		if (isDesktop()) {
+			const { open } = await import(
+				'@tauri-apps/plugin-dialog'
+			);
 
-function fileName(path: string): string {
-	return path.split(/[\\/]/).pop() ?? path;
-}
+			const { readFile } = await import(
+				'@tauri-apps/plugin-fs'
+			);
+
+			const selected = await open({
+				multiple: false,
+				directory: false,
+				filters: [
+					{
+						name: 'PluralSpace exports',
+						extensions: [
+							'zip',
+							'json'
+						]
+					}
+				]
+			});
+
+			if (typeof selected !== 'string') {
+				return;
+			}
+
+			selectedFile = selected;
+			loading = true;
+
+			try {
+				const bytes =
+					await readFile(selected);
+
+				pluralSpaceData =
+					parsePluralSpaceExport(bytes);
+			} catch (error) {
+				errorMessage =
+					error instanceof Error
+						? error.message
+						: 'The selected PluralSpace export could not be read.';
+			} finally {
+				loading = false;
+			}
+
+			return;
+		}
+
+		if (!browser) {
+			return;
+		}
+
+		const input =
+			document.createElement('input');
+
+		input.type = 'file';
+		input.accept =
+			'.zip,.json,application/zip,application/json';
+
+		input.onchange = async () => {
+			const file =
+				input.files?.[0];
+
+			if (!file) {
+				return;
+			}
+
+			selectedFile = file.name;
+			loading = true;
+
+			try {
+				const bytes =
+					new Uint8Array(
+						await file.arrayBuffer()
+					);
+
+				pluralSpaceData =
+					parsePluralSpaceExport(bytes);
+			} catch (error) {
+				errorMessage =
+					error instanceof Error
+						? error.message
+						: 'The selected PluralSpace export could not be read.';
+			} finally {
+				loading = false;
+			}
+		};
+
+		input.click();
+	}
+
+	async function confirmImport() {
+		if (
+			importSource === 'pluralspace'
+		) {
+			errorMessage =
+				'PluralSpace preview is ready. The database import step is next.';
+			return;
+		}
+
+		if (
+			!importData ||
+			importing ||
+			importComplete
+		) {
+			return;
+		}
+
+		errorMessage = '';
+		importing = true;
+
+		try {
+			const dataAdapter =
+				getDataAdapter();
+
+			importResult =
+				await dataAdapter.importAmpersandData(
+					importData
+				);
+
+			importComplete = true;
+		} catch (error) {
+			errorMessage =
+				error instanceof Error
+					? error.message
+					: 'The system could not be imported.';
+		} finally {
+			importing = false;
+		}
+	}
+
+	function clearImport() {
+		resetImportState();
+	}
+
+	function fileName(path: string): string {
+		return (
+			path.split(/[\\/]/).pop() ??
+			path
+		);
+	}
 </script>
 
 <svelte:head>
@@ -194,7 +329,7 @@ function fileName(path: string): string {
 		<h1>Import System</h1>
 
 		<p class="subtitle">
-			Bring an existing system into TECSPA from an Ampersand JSON export.
+			Bring an existing system into TECSPA from a supported system export..
 		</p>
 
 		<div class="header-ornament" aria-hidden="true">
@@ -202,40 +337,134 @@ function fileName(path: string): string {
 		</div>
 	</header>
 
+<section class="source-selector">
+	<div class="source-selector-heading">
+		<div>
+			<p class="eyebrow">IMPORT SOURCE</p>
+
+			<h2>Choose an exporter</h2>
+
+			<p>
+				Select the format of the system export you want
+				to bring into TECSPA.
+			</p>
+		</div>
+	</div>
+
+	<div class="source-selector-grid">
+		<button
+			type="button"
+			class:active={importSource === 'ampersand'}
+			class="source-card"
+			onclick={() => selectSource('ampersand')}
+			disabled={loading || importing}
+		>
+			<span class="source-symbol">A</span>
+
+			<span class="source-card-content">
+				<strong>Ampersand</strong>
+
+				<span>
+					Import an Ampersand JSON system export.
+				</span>
+			</span>
+
+			{#if importSource === 'ampersand'}
+				<span class="source-active">selected</span>
+			{/if}
+		</button>
+
+		<button
+			type="button"
+			class:active={importSource === 'pluralspace'}
+			class="source-card"
+			onclick={() => selectSource('pluralspace')}
+			disabled={loading || importing}
+		>
+			<span class="source-symbol">P</span>
+
+			<span class="source-card-content">
+				<strong>PluralSpace</strong>
+
+				<span>
+					Import a PluralSpace / OpenPlural JSON or ZIP export.
+				</span>
+			</span>
+
+			{#if importSource === 'pluralspace'}
+				<span class="source-active">selected</span>
+			{/if}
+		</button>
+	</div>
+</section>
+
 	<section class="import-panel">
-		<div class="panel-header">
-			<div>
+	<div class="panel-header">
+		<div>
+			{#if importSource === 'ampersand'}
 				<h2>Ampersand Export</h2>
 
 				<p>
 					Choose an Ampersand JSON export to preview
 					what will be imported into TECSPA.
 				</p>
-			</div>
+			{:else}
+				<h2>PluralSpace Export</h2>
+
+				<p>
+					Choose a PluralSpace JSON or ZIP export to preview
+					what can be imported into TECSPA.
+				</p>
+			{/if}
+		</div>
 
 			<div class="panel-symbol">↳</div>
 		</div>
 
 		<div class="file-picker">
-			<div class="file-picker-info">
-				{#if selectedFile}
-					<div class="file-name">
-						{fileName(selectedFile)}
-					</div>
+	<div class="file-picker-info">
+		{#if selectedFile}
+			<div class="file-name">
+				{fileName(selectedFile)}
+			</div>
 
-					<div class="file-path">
-						{selectedFile}
-					</div>
+			<div class="file-path">
+				{selectedFile}
+			</div>
+		{:else}
+			<div class="file-name">
+				No export selected
+			</div>
+
+			<div class="file-path">
+				{#if importSource === 'ampersand'}
+					Choose your Ampersand JSON export to begin.
 				{:else}
-					<div class="file-name">
-						No export selected
-					</div>
-
-					<div class="file-path">
-						Choose your Ampersand JSON export to begin.
-					</div>
+					Choose your PluralSpace JSON or ZIP export to begin.
 				{/if}
 			</div>
+		{/if}
+	</div>
+
+	<button
+		class="secondary-button"
+		type="button"
+		onclick={
+			importSource === 'ampersand'
+				? selectAmpersandExport
+				: selectPluralSpaceExport
+		}
+		disabled={loading}
+	>
+		{#if loading}
+			Reading…
+		{:else if importSource === 'ampersand'}
+			Choose JSON
+		{:else}
+			Choose JSON / ZIP
+		{/if}
+	</button>
+</div>
 
 			<button
 				class="secondary-button"
@@ -258,7 +487,6 @@ function fileName(path: string): string {
 				</div>
 			</div>
 		{/if}
-	</section>
 
 	{#if importData}
 		<section class="preview-panel">
@@ -521,7 +749,244 @@ function fileName(path: string): string {
 </div>
 		</section>
 	{/if}
-</div>
+
+{#if pluralSpaceData}
+	<section class="preview-panel pluralspace-preview">
+		<div class="preview-heading">
+			<div>
+				<p class="eyebrow">
+					PLURALSPACE / OPENPLURAL PREVIEW
+				</p>
+
+				<h2>
+					{pluralSpaceData.system.name}
+				</h2>
+
+				{#if pluralSpaceData.system.description}
+					<p class="system-description">
+						{pluralSpaceData.system.description}
+					</p>
+				{/if}
+			</div>
+
+			<div class="ready-badge">
+				READY TO REVIEW
+			</div>
+		</div>
+
+		<div class="summary-grid">
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.members.length}
+				</span>
+
+				<span class="summary-label">
+					Members
+				</span>
+			</div>
+
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.frontHistory.length}
+				</span>
+
+				<span class="summary-label">
+					Fronting Entries
+				</span>
+			</div>
+
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.customFields.length}
+				</span>
+
+				<span class="summary-label">
+					Custom Fields
+				</span>
+			</div>
+
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.journalEntries.length}
+				</span>
+
+				<span class="summary-label">
+					Journal Entries
+				</span>
+			</div>
+
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.media.length}
+				</span>
+
+				<span class="summary-label">
+					Bundled Media
+				</span>
+			</div>
+
+			<div class="summary-card">
+				<span class="summary-value">
+					{pluralSpaceData.sourceVersion || '—'}
+				</span>
+
+				<span class="summary-label">
+					OpenPlural Version
+				</span>
+			</div>
+		</div>
+
+		<div class="preview-section">
+			<div class="section-heading">
+				<div>
+					<h3>Members</h3>
+
+					<p>
+						These members were parsed from the PluralSpace export.
+					</p>
+				</div>
+
+				<span>
+					{pluralSpaceData.members.length}
+				</span>
+			</div>
+
+			<div class="member-preview-list">
+				{#each pluralSpaceData.members as member}
+					<div class="member-preview">
+						<div class="member-preview-main">
+							<div class="member-name">
+								{member.name}
+							</div>
+
+							<div class="member-meta">
+								{#if member.pronouns}
+									<span>
+										{member.pronouns}
+									</span>
+								{/if}
+
+								{#if member.role}
+									<span>
+										{member.role}
+									</span>
+								{/if}
+
+								<span
+									class:archived={
+										member.status === 'archived'
+									}
+									class="status"
+								>
+									{member.status}
+								</span>
+
+								{#if member.isFronting}
+									<span class="fronting">
+										fronting
+									</span>
+								{/if}
+							</div>
+						</div>
+
+						<div class="member-preview-counts">
+							{#if member.avatar}
+								<span>avatar</span>
+							{/if}
+
+							{#if member.banner}
+								<span>banner</span>
+							{/if}
+
+							{#if member.customFields.length > 0}
+								<span>
+									{member.customFields.length}
+									fields
+								</span>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+
+		{#if pluralSpaceData.warnings.length > 0}
+			<div class="preview-section warnings-section">
+				<div class="section-heading warning-heading">
+					<div>
+						<h3>Warnings</h3>
+
+						<p>
+							These parts of the PluralSpace export have
+							not been silently converted into unrelated
+							TECSPA data.
+						</p>
+					</div>
+
+					<span>
+						{pluralSpaceData.warnings.length}
+					</span>
+				</div>
+
+				<div class="warning-list">
+					{#each pluralSpaceData.warnings as warning}
+						<div class="warning-item">
+							<span class="warning-icon">!</span>
+
+							<span>{warning}</span>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{:else}
+			<div class="success-box">
+				<div class="success-icon">✓</div>
+
+				<div>
+					<strong>
+						No mapping warnings.
+					</strong>
+
+					<p>
+						Everything currently represented by this
+						parser has a TECSPA mapping.
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<div class="import-note">
+			<strong>
+				PluralSpace export parsed successfully.
+			</strong>
+
+			<p>
+				The file is safe to review. The next step is connecting
+				this normalized data to TECSPA's database import pipeline.
+			</p>
+		</div>
+
+		<div class="actions">
+			<button
+				class="secondary-button"
+				type="button"
+				onclick={clearImport}
+				disabled={importing}
+			>
+				Cancel
+			</button>
+
+			<button
+				class="primary-button"
+				type="button"
+				onclick={confirmImport}
+				disabled={importing}
+			>
+				Database Import — Next Step
+			</button>
+		</div>
+	</section>
+{/if}
 
 <style>
 	/* =========================================================
@@ -1559,6 +2024,118 @@ function fileName(path: string): string {
 
 .import-complete-box {
 	margin-top: 1.5rem;
+}
+
+.source-selector {
+	margin-bottom: 1.5rem;
+	padding: 1.5rem;
+	border: 1px solid var(--tecspa-border);
+	background: var(--tecspa-surface);
+}
+
+.source-selector-heading {
+	margin-bottom: 1rem;
+}
+
+.source-selector-heading h2 {
+	margin: 0.2rem 0 0.4rem;
+}
+
+.source-selector-heading p:last-child {
+	margin: 0;
+	opacity: 0.75;
+}
+
+.source-selector-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.source-card {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1.1rem;
+	border: 1px solid var(--tecspa-border);
+	background: var(--tecspa-background);
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color 0.2s ease,
+		background 0.2s ease,
+		transform 0.2s ease;
+}
+
+.source-card:hover:not(:disabled) {
+	transform: translateY(-1px);
+	border-color: var(--tecspa-accent);
+}
+
+.source-card.active {
+	border-color: var(--tecspa-accent);
+	background: var(--tecspa-surface-alt);
+}
+
+.source-card:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.source-symbol {
+	display: grid;
+	place-items: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	flex: 0 0 2.5rem;
+	border: 1px solid var(--tecspa-border);
+	font-weight: 700;
+	color: var(--tecspa-accent);
+}
+
+.source-card-content {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.source-card-content strong {
+	font-size: 1rem;
+}
+
+.source-card-content span {
+	font-size: 0.85rem;
+	opacity: 0.7;
+}
+
+.source-active {
+	margin-left: auto;
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--tecspa-accent);
+	white-space: nowrap;
+}
+
+.pluralspace-preview {
+	margin-top: 1.5rem;
+}
+
+@media (max-width: 700px) {
+	.source-selector-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.source-card {
+		align-items: flex-start;
+	}
+
+	.source-active {
+		display: none;
+	}
 }
 
 </style>

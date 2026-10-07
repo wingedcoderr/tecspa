@@ -10,6 +10,8 @@ import type {
 import type { DataAdapter } from '$lib/db/adapter';
 import type { AmpersandImportData } from '$lib/importers/ampersand';
 import type { AmpersandImportResult } from '$lib/repositories/ampersand-import';
+import type { PluralSpaceImportData } from '$lib/importers/pluralspace';
+
 
 function webMediaUrl(
 	memberId: string,
@@ -142,6 +144,34 @@ async updateMember(
 
 		return data.result;
 	}	
+
+async importPluralSpaceData(
+	importData: PluralSpaceImportData
+): Promise<AmpersandImportResult> {
+	const response = await fetch(
+		'/api/import/pluralspace',
+		{
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(importData)
+		}
+	);
+
+	const data = await response.json().catch(
+		() => null
+	);
+
+	if (!response.ok) {
+		throw new Error(
+			data?.error ??
+				`PluralSpace import failed (${response.status}).`
+		);
+	}
+
+	return data.result as AmpersandImportResult;
+}
 
 	async setMemberFronting(
 		memberId: string,

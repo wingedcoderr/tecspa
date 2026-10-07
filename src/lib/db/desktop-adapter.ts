@@ -17,6 +17,8 @@ import {
 	importAmpersandData as importAmpersandDataToSqlite
 } from '$lib/repositories/ampersand-import';
 
+import type { PluralSpaceImportData } from '$lib/importers/pluralspace';
+
 export class DesktopDataAdapter implements DataAdapter {
 	async getMembers(): Promise<Member[]> {
 		const db = await initializeDatabase();
@@ -53,6 +55,20 @@ export class DesktopDataAdapter implements DataAdapter {
 	);
 
 	return importAmpersandData(
+		importData
+	);
+}
+
+async importPluralSpaceData(
+	importData: PluralSpaceImportData
+): Promise<AmpersandImportResult> {
+	const {
+		importPluralSpaceData
+	} = await import(
+		'$lib/repositories/pluralspace-import'
+	);
+
+	return importPluralSpaceData(
 		importData
 	);
 }
