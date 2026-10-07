@@ -235,89 +235,46 @@
 		input.click();
 	}
 
-function withImportTimeout<T>(
-	promise: Promise<T>,
-	stage: string,
-	timeoutMs = 15000
-): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => {
-			reject(
-				new Error(
-					`PluralSpace import timed out during ${stage}.`
-				)
-			);
-		}, timeoutMs);
-
-		promise.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			(error) => {
-				clearTimeout(timer);
-				reject(error);
-			}
-		);
-	});
-}
-
 	async function confirmImport() {
-	if (importing || importComplete) {
-		return;
-	}
-
-	if (importSource === 'pluralspace') {
-		if (!pluralSpaceData) {
-			errorMessage =
-				'No PluralSpace import data is available.';
+		if (importing || importComplete) {
 			return;
 		}
-	} else {
-		if (!importData) {
+
+		if (importSource === 'pluralspace' && !pluralSpaceData) {
 			return;
 		}
-	}
 
-	errorMessage = '';
-	importing = true;
+		if (importSource === 'ampersand' && !importData) {
+			return;
+		}
 
-	try {
-		const dataAdapter = await withImportTimeout(
-			Promise.resolve(getDataAdapter()),
-			'creating the data adapter'
-		);
+		errorMessage = '';
+		importing = true;
 
-		if (importSource === 'pluralspace') {
-			importResult = await withImportTimeout(
-	dataAdapter.importPluralSpaceData(
-		pluralSpaceData!
-	),
-	'importing PluralSpace data',
-	30000
-);
-		} else {
-			importResult = await withImportTimeout(
-				dataAdapter.importAmpersandData(
+		try {
+			const dataAdapter = getDataAdapter();
+
+			if (importSource === 'pluralspace') {
+				importResult = await dataAdapter.importPluralSpaceData(
+					pluralSpaceData!
+				);
+			} else {
+				importResult = await dataAdapter.importAmpersandData(
 					importData!
-				),
-				'importing Ampersand data'
-			);
+				);
+			}
+
+			importComplete = true;
+		} catch (error) {
+			errorMessage =
+				error instanceof Error
+					? error.message
+					: 'The system could not be imported.';
+		} finally {
+			importing = false;
 		}
-
-	} catch (error) {
-	errorMessage =
-		error instanceof Error
-			? error.message
-			: 'The system could not be imported.';
-
-	if (isDesktop()) {
-		window.alert(errorMessage);
 	}
-} finally {
-	importing = false;
-}
-	}
+
 	function clearImport() {
 		resetImportState();
 	}
@@ -787,275 +744,197 @@ function withImportTimeout<T>(
 
 {#if pluralSpaceData}
 	<section class="preview-panel pluralspace-preview">
-		<div class="preview-heading">
-			<div>
-				<p class="eyebrow">
-					PLURALSPACE / OPENPLURAL PREVIEW
-				</p>
-
-				<h2>
-					{pluralSpaceData.system.name}
-				</h2>
-
-				{#if pluralSpaceData.system.description}
-					<p class="system-description">
-						{pluralSpaceData.system.description}
-					</p>
-				{/if}
-			</div>
-
-			<div class="ready-badge">
-				READY TO REVIEW
-			</div>
-		</div>
-
-		<div class="summary-grid">
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.members.length}
-				</span>
-
-				<span class="summary-label">
-					Members
-				</span>
-			</div>
-
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.frontHistory.length}
-				</span>
-
-				<span class="summary-label">
-					Fronting Entries
-				</span>
-			</div>
-
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.customFields.length}
-				</span>
-
-				<span class="summary-label">
-					Custom Fields
-				</span>
-			</div>
-
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.journalEntries.length}
-				</span>
-
-				<span class="summary-label">
-					Journal Entries
-				</span>
-			</div>
-
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.media.length}
-				</span>
-
-				<span class="summary-label">
-					Bundled Media
-				</span>
-			</div>
-
-			<div class="summary-card">
-				<span class="summary-value">
-					{pluralSpaceData.sourceVersion || '—'}
-				</span>
-
-				<span class="summary-label">
-					OpenPlural Version
-				</span>
-			</div>
-		</div>
-
-		<div class="preview-section">
-			<div class="section-heading">
+		{#if importComplete && importResult}
+			<div class="preview-heading">
 				<div>
-					<h3>Members</h3>
-
-					<p>
-						These members were parsed from the PluralSpace export.
+					<p class="eyebrow">PLURALSPACE IMPORT COMPLETE</p>
+					<h2>System imported successfully.</h2>
+					<p class="system-description">
+						Your PluralSpace system is now part of TECSPA.
 					</p>
 				</div>
 
-				<span>
-					{pluralSpaceData.members.length}
-				</span>
+				<div class="ready-badge">IMPORTED ✓</div>
 			</div>
 
-			<div class="member-preview-list">
-				{#each pluralSpaceData.members as member}
-					<div class="member-preview">
-						<div class="member-preview-main">
-							<div class="member-name">
-								{member.name}
-							</div>
-
-							<div class="member-meta">
-								{#if member.pronouns}
-									<span>
-										{member.pronouns}
-									</span>
-								{/if}
-
-								{#if member.role}
-									<span>
-										{member.role}
-									</span>
-								{/if}
-
-								<span
-									class:archived={
-										member.status === 'archived'
-									}
-									class="status"
-								>
-									{member.status}
-								</span>
-
-								{#if member.isFronting}
-									<span class="fronting">
-										fronting
-									</span>
-								{/if}
-							</div>
-						</div>
-
-						<div class="member-preview-counts">
-							{#if member.avatar}
-								<span>avatar</span>
-							{/if}
-
-							{#if member.banner}
-								<span>banner</span>
-							{/if}
-
-							{#if member.customFields.length > 0}
-								<span>
-									{member.customFields.length}
-									fields
-								</span>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
-
-		{#if pluralSpaceData.warnings.length > 0}
-			<div class="preview-section warnings-section">
-				<div class="section-heading warning-heading">
-					<div>
-						<h3>Warnings</h3>
-
-						<p>
-							These parts of the PluralSpace export have
-							not been silently converted into unrelated
-							TECSPA data.
-						</p>
-					</div>
-
-					<span>
-						{pluralSpaceData.warnings.length}
-					</span>
+			<div class="summary-grid">
+				<div class="summary-card">
+					<span class="summary-value">{importResult.memberCount}</span>
+					<span class="summary-label">Members Imported</span>
 				</div>
 
-				<div class="warning-list">
-					{#each pluralSpaceData.warnings as warning}
-						<div class="warning-item">
-							<span class="warning-icon">!</span>
+				<div class="summary-card">
+					<span class="summary-value">{importResult.frontHistoryCount}</span>
+					<span class="summary-label">Fronting Entries</span>
+				</div>
 
-							<span>{warning}</span>
+				<div class="summary-card">
+					<span class="summary-value">{importResult.imageCount}</span>
+					<span class="summary-label">Avatars</span>
+				</div>
+
+				<div class="summary-card">
+					<span class="summary-value">{importResult.bannerCount}</span>
+					<span class="summary-label">Banners</span>
+				</div>
+			</div>
+
+			<div class="success-box import-complete-box">
+				<div class="success-icon">✓</div>
+				<div>
+					<strong>Your headmates are now available in TECSPA.</strong>
+					<p>
+						The imported members, fronting history, avatars, and banners
+						have been added to your authenticated TECSPA system.
+					</p>
+				</div>
+			</div>
+
+			<div class="actions">
+				<a class="primary-button" href="/members">
+					View Headmates →
+				</a>
+
+				<button
+					class="secondary-button"
+					type="button"
+					onclick={clearImport}
+				>
+					Import Another System
+				</button>
+			</div>
+		{:else}
+			<div class="preview-heading">
+				<div>
+					<p class="eyebrow">PLURALSPACE / OPENPLURAL PREVIEW</p>
+					<h2>{pluralSpaceData.system.name}</h2>
+
+					{#if pluralSpaceData.system.description}
+						<p class="system-description">
+							{pluralSpaceData.system.description}
+						</p>
+					{/if}
+				</div>
+
+				<div class="ready-badge">READY TO REVIEW</div>
+			</div>
+
+			<div class="summary-grid">
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.members.length}</span>
+					<span class="summary-label">Members</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.frontHistory.length}</span>
+					<span class="summary-label">Fronting Entries</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.customFields.length}</span>
+					<span class="summary-label">Custom Fields</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.journalEntries.length}</span>
+					<span class="summary-label">Journal Entries</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.media.length}</span>
+					<span class="summary-label">Bundled Media</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-value">{pluralSpaceData.sourceVersion || '—'}</span>
+					<span class="summary-label">OpenPlural Version</span>
+				</div>
+			</div>
+
+			<div class="preview-section">
+				<div class="section-heading">
+					<div>
+						<h3>Members</h3>
+						<p>These members were parsed from the PluralSpace export.</p>
+					</div>
+					<span>{pluralSpaceData.members.length}</span>
+				</div>
+
+				<div class="member-preview-list">
+					{#each pluralSpaceData.members as member}
+						<div class="member-preview">
+							<div class="member-preview-main">
+								<div class="member-name">{member.name}</div>
+								<div class="member-meta">
+									{#if member.pronouns}<span>{member.pronouns}</span>{/if}
+									{#if member.role}<span>{member.role}</span>{/if}
+									<span class="status">{member.status}</span>
+									{#if member.isFronting}<span class="fronting">fronting</span>{/if}
+								</div>
+							</div>
+
+							<div class="member-preview-counts">
+								{#if member.avatar}<span>avatar</span>{/if}
+								{#if member.banner}<span>banner</span>{/if}
+								{#if member.customFields.length > 0}<span>{member.customFields.length} fields</span>{/if}
+							</div>
 						</div>
 					{/each}
 				</div>
 			</div>
-		{:else}
-			<div class="success-box">
-				<div class="success-icon">✓</div>
 
-				<div>
-					<strong>
-						No mapping warnings.
-					</strong>
+			{#if pluralSpaceData.warnings.length > 0}
+				<div class="preview-section warnings-section">
+					<div class="section-heading warning-heading">
+						<div>
+							<h3>Warnings</h3>
+							<p>These parts of the export have not been silently converted into unrelated TECSPA data.</p>
+						</div>
+						<span>{pluralSpaceData.warnings.length}</span>
+					</div>
 
-					<p>
-						Everything currently represented by this
-						parser has a TECSPA mapping.
-					</p>
+					<div class="warning-list">
+						{#each pluralSpaceData.warnings as warning}
+							<div class="warning-item">
+								<span class="warning-icon">!</span>
+								<span>{warning}</span>
+							</div>
+						{/each}
+					</div>
 				</div>
-			</div>
-		{/if}
-
-		{#if importComplete && importResult}
-			<div class="success-box import-complete-box">
-				<div class="success-icon">✓</div>
-
-				<div>
-					<strong>
-						{importResult.memberCount}
-						{importResult.memberCount === 1
-							? ' member'
-							: ' members'}
-						imported successfully.
-					</strong>
-
-					<p>
-						{importResult.frontHistoryCount}
-						fronting history entries and
-						{importResult.imageCount}
-						avatars /
-						{importResult.bannerCount}
-						banners were imported into TECSPA.
-					</p>
-
-					<p>
-						Your imported members are now stored in the
-						TECSPA database.
-					</p>
+			{:else}
+				<div class="success-box">
+					<div class="success-icon">✓</div>
+					<div>
+						<strong>No mapping warnings.</strong>
+						<p>Everything currently represented by this parser has a TECSPA mapping.</p>
+					</div>
 				</div>
-			</div>
-		{:else}
+			{/if}
+
 			<div class="import-note">
-				<strong>
-					PluralSpace export parsed successfully.
-				</strong>
-
+				<strong>Ready to import.</strong>
 				<p>
-					Review the preview above, then click Import System
-					to add this system to TECSPA.
+					Click Import System to add this system's members, custom fields,
+					fronting history, journal entries, avatars, and banners to TECSPA.
 				</p>
 			</div>
+
+			<div class="actions">
+				<button
+					class="secondary-button"
+					type="button"
+					onclick={clearImport}
+					disabled={importing}
+				>
+					Cancel
+				</button>
+
+				<button
+					class="primary-button"
+					type="button"
+					onclick={confirmImport}
+					disabled={importing}
+				>
+					{importing ? 'Importing…' : 'Import System'}
+				</button>
+			</div>
 		{/if}
-
-		<div class="actions">
-			<button
-				class="secondary-button"
-				type="button"
-				onclick={clearImport}
-				disabled={importing}
-			>
-				Cancel
-			</button>
-
-			<button
-				class="primary-button"
-				type="button"
-				onclick={confirmImport}
-				disabled={importing || importComplete}
-			>
-				{#if importing}
-					Importing…
-				{:else if importComplete}
-					Imported ✓
-				{:else}
-					Import System
-				{/if}
-			</button>
-		</div>
 	</section>
 {/if}
 
@@ -2207,6 +2086,18 @@ function withImportTimeout<T>(
 	.source-active {
 		display: none;
 	}
+}
+
+
+.primary-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+}
+
+.import-complete-box {
+	margin-top: 1.25rem;
 }
 
 </style>

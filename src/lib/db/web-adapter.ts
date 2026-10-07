@@ -149,42 +149,100 @@ async updateMember(
 	}	
 
 async importPluralSpaceData(
-	importData: PluralSpaceImportData
-): Promise<AmpersandImportResult> {
-	const response = await fetch(
-		'/api/import/pluralspace',
-		{
+		importData: PluralSpaceImportData
+	): Promise<AmpersandImportResult> {
+		const databasePayload = {
+			...importData,
+			members: importData.members.map((member) => ({
+				...member,
+				avatar: '',
+				banner: ''
+			})),
+			media: []
+		};
+
+		const response = await fetch('/api/import/pluralspace', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({
-				...importData,
-				members: importData.members.map(
-					(member) => ({
-						...member,
-						avatar: '',
-						banner: ''
-					})
-				),
-				media: []
-			})
+			body: JSON.stringify(databasePayload)
+		});
+
+		const data = await response.json().catch(() => null);
+
+		if (!response.ok) {
+			throw new Error(
+				data?.error ??
+					`PluralSpace import failed (${response.status}).`
+			);
 		}
-	);
 
-	const data = await response.json().catch(
-		() => null
-	);
+		const memberIdMap =
+			(data?.memberIdMap ?? {}) as Record<string, string>;
 
-	if (!response.ok) {
-		throw new Error(
-			data?.error ??
-				`PluralSpace import failed (${response.status}).`
-		);
+		let imageCount = 0;
+		let bannerCount = 0;
+
+		for (const member of importData.members) {
+			const memberId = memberIdMap[member.id];
+
+			if (!memberId) {
+				throw new Error(
+					`PluralSpace import did not return an ID for member "${member.name}".`
+				);
+			}
+
+			for (const kind of ['avatar', 'banner'] as const) {
+				const dataUri =
+					kind === 'avatar'
+						? member.avatar
+						: member.banner;
+
+				if (!dataUri || !dataUri.startsWith('data:')) {
+					continue;
+				}
+
+				const mediaResponse = await fetch(
+					'/api/import/pluralspace/media',
+					{
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify({
+							memberId,
+							kind,
+							dataUri
+						})
+					}
+				);
+
+				const mediaData = await mediaResponse
+					.json()
+					.catch(() => null);
+
+				if (!mediaResponse.ok) {
+					throw new Error(
+						mediaData?.error ??
+							`Failed to upload ${kind} for ${member.name} (${mediaResponse.status}).`
+					);
+				}
+
+				if (kind === 'avatar') {
+					imageCount += 1;
+				} else {
+					bannerCount += 1;
+				}
+			}
+		}
+
+		return {
+			...(data.result as AmpersandImportResult),
+			imageCount,
+			bannerCount
+		};
 	}
-
-	return data.result as AmpersandImportResult;
-}
 
 	async setMemberFronting(
 		memberId: string,
