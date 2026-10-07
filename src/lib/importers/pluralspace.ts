@@ -1335,7 +1335,8 @@ function parseDocument(
 
 function parseJsonText(
 	jsonText: string,
-	sourceFormat: PluralSpaceSourceFormat
+	sourceFormat: PluralSpaceSourceFormat,
+	media: PluralSpaceMedia[] = []
 ): PluralSpaceImportData {
 	let parsed: unknown;
 
@@ -1355,7 +1356,8 @@ function parseJsonText(
 
 	return parseDocument(
 		parsed as OpenPluralDocument,
-		sourceFormat
+		sourceFormat,
+		media
 	);
 }
 
@@ -1467,16 +1469,11 @@ export function parsePluralSpaceZip(
 	const media =
 		extractZipMedia(files);
 
-	const parsed =
-		parseJsonText(
-			jsonText,
-			'openplural-zip'
-		);
-
-	return {
-		...parsed,
+	return parseJsonText(
+		jsonText,
+		'openplural-zip',
 		media
-	};
+	);
 }
 
 export function parsePluralSpaceExport(
