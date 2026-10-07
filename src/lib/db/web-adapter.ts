@@ -127,7 +127,10 @@ async updateMember(
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify(importData)
+			body: JSON.stringify({
+	...importData,
+	media: []
+})
 		});
 
 		if (!response.ok) {
