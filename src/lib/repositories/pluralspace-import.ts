@@ -125,7 +125,7 @@ function extensionForMimeType(mimeType: string): string {
 function withImportTimeout<T>(
     promise: Promise<T>,
     stage: string,
-    timeoutMs = 15000
+    timeoutMs = 5000
 ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
         const timer = setTimeout(() => {

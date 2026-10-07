@@ -290,11 +290,12 @@ function withImportTimeout<T>(
 
 		if (importSource === 'pluralspace') {
 			importResult = await withImportTimeout(
-				dataAdapter.importPluralSpaceData(
-					pluralSpaceData!
-				),
-				'importing PluralSpace data'
-			);
+	dataAdapter.importPluralSpaceData(
+		pluralSpaceData!
+	),
+	'importing PluralSpace data',
+	30000
+);
 		} else {
 			importResult = await withImportTimeout(
 				dataAdapter.importAmpersandData(
@@ -304,16 +305,19 @@ function withImportTimeout<T>(
 			);
 		}
 
-		importComplete = true;
 	} catch (error) {
-		errorMessage =
-			error instanceof Error
-				? error.message
-				: 'The system could not be imported.';
-	} finally {
-		importing = false;
+	errorMessage =
+		error instanceof Error
+			? error.message
+			: 'The system could not be imported.';
+
+	if (isDesktop()) {
+		window.alert(errorMessage);
 	}
+} finally {
+	importing = false;
 }
+	}
 	function clearImport() {
 		resetImportState();
 	}
