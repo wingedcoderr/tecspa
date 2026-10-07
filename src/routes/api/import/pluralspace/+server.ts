@@ -453,68 +453,25 @@ export const POST: RequestHandler = async ({
          * The member IDs are already generated above, so media keys are
          * deterministic and independent of the database transaction.
          */
-        await Promise.all(
-            importData.members.map(async (sourceMember) => {
-                const memberId =
-                    memberIdMap.get(sourceMember.id);
+        for (const sourceMember of importData.members) {
+    const memberId = memberIdMap.get(sourceMember.id);
 
-                if (!memberId) {
-                    throw new Error(
-                        'Failed to map an imported member ID.'
-                    );
-                }
-
-                let avatar = '';
-                let banner = '';
-
-                const avatarImage =
-                    extractEmbeddedImage(
-                        sourceMember.avatar
-                    );
-
-                if (avatarImage) {
-                    avatar =
-                        await uploadEmbeddedImage(
-                            memberId,
-                            'avatar',
-                            avatarImage.dataUri,
-                            avatarImage.mimeType
-                        );
-
-                    uploadedMedia.push({
-                        key: avatar
-                    });
-
-                    imageCount += 1;
-                }
-
-                const bannerImage =
-                    extractEmbeddedImage(
-                        sourceMember.banner
-                    );
-
-                if (bannerImage) {
-                    banner =
-                        await uploadEmbeddedImage(
-                            memberId,
-                            'banner',
-                            bannerImage.dataUri,
-                            bannerImage.mimeType
-                        );
-
-                    uploadedMedia.push({
-                        key: banner
-                    });
-
-                    bannerCount += 1;
-                }
-
-                memberMedia.set(sourceMember.id, {
-                    avatar,
-                    banner
-                });
-            })
+    if (!memberId) {
+        throw new Error(
+            'Failed to map an imported member ID.'
         );
+    }
+
+    // TEMPORARY DIAGNOSTIC:
+    // Skip S3 media uploads completely.
+    // If the import succeeds, the S3 upload path is the cause
+    // of the web import timeout.
+
+    memberMedia.set(sourceMember.id, {
+        avatar: '',
+        banner: ''
+    });
+}
 
         client = await pool.connect();
         const db = client;
