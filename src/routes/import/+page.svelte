@@ -235,63 +235,85 @@
 		input.click();
 	}
 
-	async function confirmImport() {
-		if (importing || importComplete) {
-			return;
-		}
+function withImportTimeout<T>(
+	promise: Promise<T>,
+	stage: string,
+	timeoutMs = 15000
+): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			reject(
+				new Error(
+					`PluralSpace import timed out during ${stage}.`
+				)
+			);
+		}, timeoutMs);
 
-		if (
-			importSource === 'pluralspace' &&
-			!pluralSpaceData
-		) {
-			return;
-		}
-
-		if (
-			importSource === 'ampersand' &&
-			!importData
-		) {
-			return;
-		}
-
-		errorMessage = '';
-		importing = true;
-
-		try {
-			const dataAdapter =
-				getDataAdapter();
-
-			if (importSource === 'pluralspace') {
-				if (!pluralSpaceData) {
-					return;
-				}
-
-				importResult =
-					await dataAdapter.importPluralSpaceData(
-						pluralSpaceData
-					);
-			} else {
-				if (!importData) {
-					return;
-				}
-
-				importResult =
-					await dataAdapter.importAmpersandData(
-						importData
-					);
+		promise.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error) => {
+				clearTimeout(timer);
+				reject(error);
 			}
+		);
+	});
+}
 
-			importComplete = true;
-		} catch (error) {
+	async function confirmImport() {
+	if (importing || importComplete) {
+		return;
+	}
+
+	if (importSource === 'pluralspace') {
+		if (!pluralSpaceData) {
 			errorMessage =
-				error instanceof Error
-					? error.message
-					: 'The system could not be imported.';
-		} finally {
-			importing = false;
+				'No PluralSpace import data is available.';
+			return;
+		}
+	} else {
+		if (!importData) {
+			return;
 		}
 	}
 
+	errorMessage = '';
+	importing = true;
+
+	try {
+		const dataAdapter = await withImportTimeout(
+			Promise.resolve(getDataAdapter()),
+			'creating the data adapter'
+		);
+
+		if (importSource === 'pluralspace') {
+			importResult = await withImportTimeout(
+				dataAdapter.importPluralSpaceData(
+					pluralSpaceData!
+				),
+				'importing PluralSpace data'
+			);
+		} else {
+			importResult = await withImportTimeout(
+				dataAdapter.importAmpersandData(
+					importData!
+				),
+				'importing Ampersand data'
+			);
+		}
+
+		importComplete = true;
+	} catch (error) {
+		errorMessage =
+			error instanceof Error
+				? error.message
+				: 'The system could not be imported.';
+	} finally {
+		importing = false;
+	}
+}
 	function clearImport() {
 		resetImportState();
 	}
