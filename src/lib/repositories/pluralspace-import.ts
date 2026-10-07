@@ -122,51 +122,55 @@ function extensionForMimeType(mimeType: string): string {
 
 
 
-async function storeMemberImage(
+function withImportTimeout<T>(
+    promise: Promise<T>,
+    stage: string,
+    timeoutMs = 15000
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`PluralSpace import timed out during ${stage}.`));
+        }, timeoutMs);
 
-    memberId: string,
-
-    kind: 'avatar' | 'banner',
-
-    dataUri: string
-
-): Promise<string> {
-
-    const image = dataUriParts(dataUri);
-
-
-
-    if (!image) {
-
-        return '';
-
-    }
-
-
-
-    const { storeEmbeddedMemberImage } = await import(
-
-        '$lib/media/member-media'
-
-    );
-
-
-
-    return storeEmbeddedMemberImage(
-
-        memberId,
-
-        kind,
-
-        dataUri,
-
-        image.mimeType
-
-    );
-
+        promise.then(
+            (value) => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            }
+        );
+    });
 }
 
+async function storeMemberImage(
+    memberId: string,
+    kind: 'avatar' | 'banner',
+    dataUri: string
+): Promise<string> {
+    const image = dataUriParts(dataUri);
 
+    if (!image) {
+        return '';
+    }
+
+    const { storeEmbeddedMemberImage } = await withImportTimeout(
+        import('$lib/media/member-media'),
+        'loading the member media module'
+    );
+
+    return withImportTimeout(
+        storeEmbeddedMemberImage(
+            memberId,
+            kind,
+            dataUri,
+            image.mimeType
+        ),
+        `storing ${kind} media`
+    );
+}
 
 function remapMember(
 
@@ -294,14 +298,21 @@ export async function importPluralSpaceData(
             createdMembers.push(member);
         }
 
-        const db = await getDatabase();
+        const db = await withImportTimeout(
+            getDatabase(),
+            'opening the SQLite database'
+        );
 
-        await db.execute('BEGIN');
+        await withImportTimeout(
+            db.execute('BEGIN'),
+            'starting the SQLite transaction'
+        );
 
         try {
             for (const member of createdMembers) {
-                await db.execute(
-                    `
+                await withImportTimeout(
+                    db.execute(
+                        `
                         INSERT INTO members (
                             id,
                             name,
@@ -345,6 +356,8 @@ export async function importPluralSpaceData(
                         member.banner,
                         member.isFronting ? 1 : 0
                     ]
+                    ),
+                    'inserting the first imported member'
                 );
             }
 
@@ -440,7 +453,10 @@ export async function importPluralSpaceData(
                 );
             }
 
-            await db.execute('COMMIT');
+            await withImportTimeout(
+                db.execute('COMMIT'),
+                'committing the SQLite transaction'
+            );
         } catch (error) {
             try {
                 await db.execute('ROLLBACK');
