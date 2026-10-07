@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+﻿import { json } from '@sveltejs/kit';
 import type { Cookies } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getIncomingShare, requireAcceptedIncomingShare, requireContributor } from '$lib/server/sharing';
@@ -14,13 +14,13 @@ async function getPayload(cookies: Cookies, shareId: string) {
                front_triggers, avatar, banner, is_fronting
         FROM members
         WHERE system_id = $1
-          AND ($2::boolean OR is_fronting = true)
+          AND ($2::boolean OR is_fronting = 1)
         ORDER BY name
       `, [share.systemId, p.viewMembers])
     : { rows: [] };
 
   const members = memberResult.rows.map((m) => {
-    const isFronting = p.viewFronting && m.is_fronting === true;
+    const isFronting = p.viewFronting && Number(m.is_fronting) === 1;
     const canSeeProfile = p.viewMembers;
     return {
       id: String(m.id),
@@ -165,8 +165,9 @@ export const PATCH: RequestHandler = async ({ cookies, params, request }) => {
     await pool.query(`
       UPDATE members SET is_fronting = $1
       WHERE id = $2 AND system_id = $3
-    `, [body.isFronting, body.memberId, share.systemId]);
+    `, [body.isFronting ? 1 : 0, body.memberId, share.systemId]);
   }
 
   return json(await getPayload(cookies, params.shareId));
 };
+
