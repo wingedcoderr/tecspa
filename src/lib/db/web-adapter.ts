@@ -158,7 +158,17 @@ async importPluralSpaceData(
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify(importData)
+			body: JSON.stringify({
+				...importData,
+				members: importData.members.map(
+					(member) => ({
+						...member,
+						avatar: '',
+						banner: ''
+					})
+				),
+				media: []
+			})
 		}
 	);
 
