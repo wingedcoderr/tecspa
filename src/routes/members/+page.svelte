@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-import { setMemberFronting } from '$lib/repositories/members';
 import { getDataAdapter } from '$lib/db/data-adapter';
 import { memberImageUrl } from '$lib/media/member-media';
 import { isDesktop } from '$lib/platform';
@@ -19,7 +18,7 @@ async function toggleFronting(member: Member) {
 	try {
 		const nextValue = !member.isFronting;
 
-		await setMemberFronting(member.id, nextValue);
+		await getDataAdapter().setMemberFronting(member.id, nextValue);
 
 		members = members.map((item) =>
 			item.id === member.id
