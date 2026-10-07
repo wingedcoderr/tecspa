@@ -13,102 +13,37 @@ async function storeMemberImage(
 	kind: 'avatar' | 'banner',
 	dataUri: string
 ): Promise<string> {
-	const image = dataUriParts(dataUri);
-
-	if (!image) {
+	if (!dataUri || !dataUri.startsWith('data:')) {
 		return '';
 	}
 
-	const mediaModule = await withImportTimeout(
-		import('$lib/media/member-media'),
-		'loading the member media module'
+	const commaIndex = dataUri.indexOf(',');
+
+	if (commaIndex === -1) {
+		throw new Error(
+			`The imported ${kind} image is malformed.`
+		);
+	}
+
+	const header = dataUri.slice(5, commaIndex);
+	const mimeType = header.split(';')[0]?.trim();
+
+	if (!mimeType) {
+		throw new Error(
+			`The imported ${kind} image has no MIME type.`
+		);
+	}
+
+	const { storeEmbeddedMemberImage } = await import(
+		'$lib/media/member-media'
 	);
 
-	return withImportTimeout(
-		mediaModule.storeEmbeddedMemberImage(
-			memberId,
-			kind,
-			dataUri,
-			image.mimeType
-		),
-		`storing ${kind} media`
+	return storeEmbeddedMemberImage(
+		memberId,
+		kind,
+		dataUri,
+		mimeType
 	);
-}
-
-function dataUriParts(value: string): {
-
-    mimeType: string;
-
-    bytes: Uint8Array;
-
-} | null {
-
-    if (!value || !value.startsWith('data:')) {
-
-        return null;
-
-    }
-
-
-
-    const commaIndex = value.indexOf(',');
-
-
-
-    if (commaIndex === -1) {
-
-        throw new Error('The embedded member image is malformed.');
-
-    }
-
-
-
-    const header = value.slice(5, commaIndex);
-
-    const payload = value.slice(commaIndex + 1);
-
-    const mimeType = header.split(';')[0]?.trim();
-
-
-
-    if (!mimeType) {
-
-        throw new Error('The embedded member image has no MIME type.');
-
-    }
-
-
-
-    if (header.includes(';base64')) {
-
-        const binary = atob(payload);
-
-        const bytes = new Uint8Array(binary.length);
-
-
-
-        for (let index = 0; index < binary.length; index += 1) {
-
-            bytes[index] = binary.charCodeAt(index);
-
-        }
-
-
-
-        return { mimeType, bytes };
-
-    }
-
-
-
-    return {
-
-        mimeType,
-
-        bytes: new TextEncoder().encode(decodeURIComponent(payload))
-
-    };
-
 }
 
 
@@ -275,13 +210,10 @@ export async function importPluralSpaceData(
             const member = remapMember(sourceMember, id);
 
             if (sourceMember.avatar?.startsWith('data:')) {
-                member.avatar = await withImportTimeout(
-	storeMemberImage(
-                    		id,
-		'avatar',
-		sourceMember.avatar
-	),
-	`storing avatar for member ${memberIndex + 1}`
+                member.avatar = await storeMemberImage(
+	id,
+	'avatar',
+	sourceMember.avatar
 );
 
                 if (member.avatar) {
@@ -290,14 +222,11 @@ export async function importPluralSpaceData(
             }
 
             if (sourceMember.banner?.startsWith('data:')) {
-                member.banner = await withImportTimeout(
-                    storeMemberImage(
-                        id,
-                        'banner',
-                        sourceMember.banner
-                    ),
-                    `storing banner for member ${memberIndex + 1}`
-                );
+                member.banner = await storeMemberImage(
+	id,
+	'banner',
+	sourceMember.banner
+);
 
                 if (member.banner) {
                     bannerCount += 1;
