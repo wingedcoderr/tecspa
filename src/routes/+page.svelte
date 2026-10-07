@@ -89,6 +89,11 @@
 		<span>⇩</span>
 		import
 	</a>
+
+	<a href="/sharing" class="top-nav-link">
+	<span>♢</span>
+	<span>sharing</span>
+</a>
 </nav>
 		<!-- =================================================
 		     ORNAMENTAL HEADER
