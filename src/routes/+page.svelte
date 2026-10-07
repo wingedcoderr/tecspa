@@ -659,6 +659,21 @@
 			);
 	}
 
+.top-nav-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	text-decoration: none;
+	transition:
+		opacity 0.2s ease,
+		transform 0.2s ease;
+}
+
+.top-nav-link:hover {
+	opacity: 0.75;
+	transform: translateY(-1px);
+}
+
 	.top-nav-link {
 		position: relative;
 
