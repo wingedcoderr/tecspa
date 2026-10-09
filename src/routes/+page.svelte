@@ -75,11 +75,6 @@
 		members
 	</a>
 
-   <a href="/communities" class="top-nav-link">
-	<span>✦</span>
-	communities
-</a>
-
 	<a href="/chat" class="top-nav-link">
 		<span>❧</span>
 		chat
