@@ -5,6 +5,8 @@ import { memberImageUrl } from '$lib/media/member-media';
 import { isDesktop } from '$lib/platform';
 import type { Member } from '$lib/data/members';
 import { saveMemberRecord } from '$lib/crypto/vault';
+import { hasMasterKey, setMasterKey } from '$lib/crypto/session';
+import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
 
 	let members: Member[] = [];
 	let avatarUrls: Record<string, string> = {};
@@ -12,6 +14,10 @@ import { saveMemberRecord } from '$lib/crypto/vault';
 	let errorMessage = '';
 	let migrationMessage = '';
 	let migrating = false;
+	let unlockNeeded = false;
+	let unlockPassword = '';
+	let unlocking = false;
+	let unlockError = '';
 
 	let frontingIds = new Set<string>();
 
@@ -20,6 +26,30 @@ import { saveMemberRecord } from '$lib/crypto/vault';
 	 * Records are encrypted in this browser before they are written to the vault.
 	 * The legacy rows are deliberately NOT deleted by this operation.
 	 */
+	async function unlockEncryption() {
+		if (!unlockPassword || unlocking) return;
+		unlocking = true;
+		unlockError = '';
+		try {
+			const response = await fetch('/api/crypto/key', { headers: { Accept: 'application/json' } });
+			const data = await response.json().catch(() => null);
+			if (!response.ok || !data?.initialized || !data.key) {
+				throw new Error(data?.error ?? 'Could not retrieve the encrypted account key.');
+			}
+			const key = await unwrapMasterKey(data.key as EncryptedPayload, unlockPassword);
+			setMasterKey(key);
+			unlockPassword = '';
+			unlockNeeded = false;
+			loading = true;
+			await loadMemberDirectory();
+		} catch (error) {
+			console.error('Unable to unlock TECSPA encryption:', error);
+			unlockError = 'Unable to unlock encryption. Check your password and try again.';
+		} finally {
+			unlocking = false;
+		}
+	}
+
 	async function migrateExistingMembers() {
 		if (isDesktop() || migrating) return;
 		const confirmed = window.confirm(
@@ -85,7 +115,12 @@ async function toggleFronting(member: Member) {
 	}
 }
 
-	onMount(async () => {
+	async function loadMemberDirectory() {
+	if (!isDesktop() && !hasMasterKey()) {
+		unlockNeeded = true;
+		loading = false;
+		return;
+	}
 	try {
 		members = await getDataAdapter().getMembers();
 
@@ -132,7 +167,11 @@ async function toggleFronting(member: Member) {
 	} finally {
 		loading = false;
 	}
-});
+}
+
+	onMount(() => {
+		void loadMemberDirectory();
+	});
 </script>
 
 <svelte:head>
@@ -169,6 +208,18 @@ async function toggleFronting(member: Member) {
 					TECSPA is retrieving the member records from its local
 					database.
 				</p>
+			</section>
+		{:else if unlockNeeded}
+			<section class="message-panel unlock-panel">
+				<p class="message-symbol">🔐</p>
+				<h2>unlock your encrypted data</h2>
+				<p>Your login session is still active, but a page reload clears the encryption key from memory. Enter your account password to unlock your existing key on this device.</p>
+				<form on:submit|preventDefault={unlockEncryption}>
+					<label for="encryption-password">Account password</label>
+					<input id="encryption-password" type="password" bind:value={unlockPassword} autocomplete="current-password" required disabled={unlocking} />
+					<button type="submit" disabled={unlocking}>{unlocking ? 'unlocking…' : 'unlock encryption'}</button>
+				</form>
+				{#if unlockError}<p role="alert">{unlockError}</p>{/if}
 			</section>
 		{:else if errorMessage}
 			<section class="message-panel error-panel">
@@ -845,4 +896,31 @@ async function toggleFronting(member: Member) {
 
 		.member-info { padding-right: 0; }
 	}
+
+	.unlock-panel form {
+		display: grid;
+		gap: 0.8rem;
+		max-width: 420px;
+		margin: 1.25rem auto 0;
+		text-align: left;
+	}
+	.unlock-panel label { font-weight: 600; }
+	.unlock-panel input {
+		width: 100%;
+		box-sizing: border-box;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid var(--tecspa-border, #cbbce5);
+		border-radius: 0.6rem;
+		background: var(--tecspa-panel, #fff);
+		color: inherit;
+	}
+	.unlock-panel button {
+		padding: 0.8rem 1rem;
+		border: 1px solid var(--tecspa-accent, #8056b8);
+		border-radius: 0.6rem;
+		background: var(--tecspa-accent, #8056b8);
+		color: white;
+		cursor: pointer;
+	}
+	.unlock-panel button:disabled { opacity: 0.65; cursor: wait; }
 </style>
