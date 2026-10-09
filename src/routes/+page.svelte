@@ -75,12 +75,11 @@
 		members
 	</a>
 
-	```svelte
 <a href="/communities" class="top-nav-link">
 	<span>✦</span>
 	communities
 </a>
-```
+
 
 	<a href="/chat" class="top-nav-link">
 		<span>❧</span>
@@ -354,7 +353,6 @@
 	<span class="card-arrow">↗</span>
 </a>
 
-```svelte
 <a class="link-card" href="/communities">
 	<div class="card-top">
 		<span class="card-symbol">✦</span>
@@ -371,7 +369,6 @@
 
 	<span class="card-arrow">↗</span>
 </a>
-```
 
 				<a class="link-card" href="/front">
 					<div class="card-top">
