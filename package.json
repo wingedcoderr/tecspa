@@ -12,7 +12,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "db:migrate": "node scripts/run-migration.mjs",
-    "db:security-check": "node scripts/security-check.mjs"
+    "db:security-check": "node scripts/security-check.mjs",
+    "e2ee:source-check": "node scripts/e2ee-source-check.mjs"
   },
   "license": "MIT",
   "dependencies": {

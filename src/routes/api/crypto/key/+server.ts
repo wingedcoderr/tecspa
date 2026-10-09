@@ -56,7 +56,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		payload.version !== 1 ||
 		payload.algorithm !== 'AES-GCM' ||
 		payload.kdf !== 'PBKDF2-SHA-256' ||
-		typeof payload.iterations !== 'number' ||
+		payload.iterations !== 600_000 ||
 		typeof payload.salt !== 'string' ||
 		typeof payload.iv !== 'string' ||
 		typeof payload.ciphertext !== 'string'
@@ -68,15 +68,22 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		return json({ error: 'Encryption key payload is too large.' }, { status: 413 });
 	}
 
-	await pool.query(
+	const inserted = await pool.query(
 		`
 			INSERT INTO account_encryption_keys (account_id, encrypted_key, created_at, updated_at)
 			VALUES ($1, $2::jsonb, NOW(), NOW())
-			ON CONFLICT (account_id)
-			DO UPDATE SET encrypted_key = EXCLUDED.encrypted_key, updated_at = NOW()
+			ON CONFLICT (account_id) DO NOTHING
+			RETURNING account_id
 		`,
 		[account.id, JSON.stringify(encryptedKey)]
 	);
+
+	if (inserted.rowCount !== 1) {
+		return json(
+			{ error: 'An encryption key already exists. Key replacement requires the dedicated recovery flow.' },
+			{ status: 409 }
+		);
+	}
 
 	return json({ initialized: true });
 };

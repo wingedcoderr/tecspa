@@ -2,6 +2,9 @@
 
 ## Current status
 
+The current development branch routes web member, chat, journal, front-history, and poll data through the encrypted vault adapter. Legacy web endpoints that read or write plaintext private content return HTTP 410 while they are being migrated. This is a fail-closed transition and may temporarily disable import/media/shared-content features. It is not a complete release: desktop SQLite at-rest encryption, recipient key wrapping for sharing, encrypted media UX, legacy data migration, recovery keys, and independent review remain outstanding.
+
+
 TECSPA currently uses authenticated server-side PostgreSQL APIs for the web application. Existing member, journal, chat, front-history, poll, and media APIs therefore still receive plaintext application data.
 
 The client-side encryption primitives in `src/lib/crypto/e2ee.ts` are the foundation for the planned zero-knowledge migration. **They do not, by themselves, make the current web application end-to-end encrypted.**

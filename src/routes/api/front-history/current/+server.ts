@@ -1,54 +1,15 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
-import { pool } from '$lib/server/db/postgres';
-import { getAuthenticatedSystem } from '$lib/server/system';
-import type { Cookies } from '@sveltejs/kit';
+// Fail closed: this legacy endpoint accepts or returns plaintext private data.
+// Private web content must use /api/crypto/vault with client-side encryption.
+const disabled: RequestHandler = async () => json(
+  { error: 'This legacy plaintext endpoint is disabled. Use encrypted TECSPA storage.' },
+  { status: 410 }
+);
 
-type FrontHistoryRow = {
-	id: string;
-	member_id: string;
-	started_at: string;
-	ended_at: string | null;
-	note: string;
-};
-
-function mapFrontHistoryRow(
-	row: FrontHistoryRow
-) {
-	return {
-		id: row.id,
-		memberId: row.member_id,
-		startedAt: row.started_at,
-		endedAt: row.ended_at,
-		note: row.note ?? ''
-	};
-}
-
-export async function GET({
-	cookies
-}: {
-	cookies: Cookies;
-}) {
-	const { system } = await getAuthenticatedSystem(cookies);
-
-	const result = await pool.query<FrontHistoryRow>(
-		`
-			SELECT
-				id,
-				member_id,
-				started_at,
-				ended_at,
-				note
-			FROM front_history
-			WHERE system_id = $1
-				AND ended_at IS NULL
-			ORDER BY started_at ASC
-			LIMIT 500
-		`,
-		[system.id]
-	);
-
-	return json(
-		result.rows.map(mapFrontHistoryRow)
-	);
-}
+export const GET = disabled;
+export const POST = disabled;
+export const PUT = disabled;
+export const PATCH = disabled;
+export const DELETE = disabled;

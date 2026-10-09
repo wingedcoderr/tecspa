@@ -4,7 +4,7 @@ import { getAuthenticatedSystem } from '$lib/server/system';
 import { pool } from '$lib/server/db/postgres';
 
 const VALID_TYPES = new Set([
-  'member', 'journal', 'chat-message', 'front-history', 'poll', 'custom'
+  'member', 'journal', 'chat-message', 'front-history', 'poll', 'custom', 'media'
 ]);
 const MAX_PAYLOAD_BYTES = 2_000_000;
 

@@ -1,7 +1,7 @@
 import { decryptWithMasterKey, encryptWithMasterKey, type VaultEncryptedPayload } from '$lib/crypto/e2ee';
 import { getMasterKey } from '$lib/crypto/session';
 
-export type VaultRecordType = 'member' | 'journal' | 'chat-message' | 'front-history' | 'poll' | 'custom';
+export type VaultRecordType = 'member' | 'journal' | 'chat-message' | 'front-history' | 'poll' | 'custom' | 'media';
 
 function requireMasterKey(): CryptoKey {
   const key = getMasterKey();

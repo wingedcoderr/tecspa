@@ -1,502 +1,119 @@
-import { deleteMemberRecord, listMemberRecords, loadMemberRecord, saveMemberRecord } from '$lib/crypto/vault';
+import {
+  deleteEncryptedRecord, listEncryptedRecords, loadEncryptedRecord, saveEncryptedRecord,
+  deleteMemberRecord, listMemberRecords, loadMemberRecord, saveMemberRecord
+} from '$lib/crypto/vault';
 import { hasMasterKey } from '$lib/crypto/session';
 import type { Member } from '$lib/data/members';
-import type {
-	ChatMessage,
-	JournalEntry,
-	Poll,
-	PollResults,
-	FrontHistoryEntry
-} from '$lib/data/activity';
-
+import type { ChatMessage, JournalEntry, Poll, PollResults, FrontHistoryEntry } from '$lib/data/activity';
 import type { DataAdapter } from '$lib/db/adapter';
 import type { AmpersandImportData } from '$lib/importers/ampersand';
 import type { AmpersandImportResult } from '$lib/repositories/ampersand-import';
 import type { PluralSpaceImportData } from '$lib/importers/pluralspace';
 
-
-function webMediaUrl(
-	memberId: string,
-	kind: 'avatar' | 'banner'
-): string {
-	return new URL(
-		`/api/media/members/${encodeURIComponent(memberId)}/${kind}`,
-		window.location.origin
-	).toString();
+function requireUnlocked(): void {
+  if (!hasMasterKey()) throw new Error('Unlock encryption before accessing private TECSPA data.');
 }
+function now(): string { return new Date().toISOString(); }
+function id(): string { return crypto.randomUUID(); }
 
-function withWebMediaUrls(member: Member): Member {
-	return {
-		...member,
-		avatar: member.avatar
-			? webMediaUrl(member.id, 'avatar')
-			: '',
-		banner: member.banner
-			? webMediaUrl(member.id, 'banner')
-			: ''
-	};
+async function list<T>(type: 'journal' | 'chat-message' | 'front-history' | 'poll' | 'custom' | 'media') {
+  requireUnlocked();
+  return (await listEncryptedRecords<T>(type)).map((record) => record.value);
 }
 
 export class WebDataAdapter implements DataAdapter {
-	async getMembers(): Promise<Member[]> {
-		if (!hasMasterKey()) throw new Error('Unlock encryption before loading member profiles.');
-		return listMemberRecords<Member>();
-	}
-
-	async getMemberById(id: string): Promise<Member | null> {
-		if (!hasMasterKey()) throw new Error('Unlock encryption before loading member profiles.');
-		return loadMemberRecord<Member>(id);
-	}
-
-	async deleteMember(id: string): Promise<void> {
-		if (!hasMasterKey()) throw new Error('Unlock encryption before changing member profiles.');
-		await deleteMemberRecord(id);
-	}
-
-	async updateMember(id: string, member: Member): Promise<Member> {
-		if (!hasMasterKey()) throw new Error('Unlock encryption before changing member profiles.');
-		if (id !== member.id) throw new Error('Member ID mismatch.');
-		await saveMemberRecord(member);
-		return member;
-	}
-
-	async importAmpersandData(
-		importData: AmpersandImportData
-	): Promise<AmpersandImportResult> {
-		const response = await fetch('/api/import', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-	...importData,
-	media: []
-})
-		});
-
-		if (!response.ok) {
-			const data =
-				await response.json().catch(() => null);
-
-			throw new Error(
-				data?.error ??
-					`Failed to import system (${response.status}).`
-			);
-		}
-
-		const data = await response.json();
-
-		return data.result;
-	}	
-
-async importPluralSpaceData(
-		importData: PluralSpaceImportData
-	): Promise<AmpersandImportResult> {
-		const databasePayload = {
-			...importData,
-			members: importData.members.map((member) => ({
-				...member,
-				avatar: '',
-				banner: ''
-			})),
-			media: []
-		};
-
-		const response = await fetch('/api/import/pluralspace', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(databasePayload)
-		});
-
-		const data = await response.json().catch(() => null);
-
-		if (!response.ok) {
-			throw new Error(
-				data?.error ??
-					`PluralSpace import failed (${response.status}).`
-			);
-		}
-
-		const memberIdMap =
-			(data?.memberIdMap ?? {}) as Record<string, string>;
-
-		let imageCount = 0;
-		let bannerCount = 0;
-
-		for (const member of importData.members) {
-			const memberId = memberIdMap[member.id];
-
-			if (!memberId) {
-				throw new Error(
-					`PluralSpace import did not return an ID for member "${member.name}".`
-				);
-			}
-
-			for (const kind of ['avatar', 'banner'] as const) {
-				const dataUri =
-					kind === 'avatar'
-						? member.avatar
-						: member.banner;
-
-				if (!dataUri || !dataUri.startsWith('data:')) {
-					continue;
-				}
-
-				const mediaResponse = await fetch(
-					'/api/import/pluralspace/media',
-					{
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
-						body: JSON.stringify({
-							memberId,
-							kind,
-							dataUri
-						})
-					}
-				);
-
-				const mediaData = await mediaResponse
-					.json()
-					.catch(() => null);
-
-				if (!mediaResponse.ok) {
-					throw new Error(
-						mediaData?.error ??
-							`Failed to upload ${kind} for ${member.name} (${mediaResponse.status}).`
-					);
-				}
-
-				if (kind === 'avatar') {
-					imageCount += 1;
-				} else {
-					bannerCount += 1;
-				}
-			}
-		}
-
-		return {
-			...(data.result as AmpersandImportResult),
-			imageCount,
-			bannerCount
-		};
-	}
-
-	async setMemberFronting(memberId: string, isFronting: boolean): Promise<void> {
-		if (!hasMasterKey()) throw new Error('Unlock encryption before changing fronting status.');
-		const member = await loadMemberRecord<Member>(memberId);
-		if (!member) throw new Error('Member not found in encrypted storage.');
-		await saveMemberRecord({ ...member, isFronting });
-	}
-
-	async getFrontHistory(): Promise<FrontHistoryEntry[]> {
-		const response = await fetch('/api/front-history');
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load front history: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as FrontHistoryEntry[];
-	}
-
-	async getFrontHistoryForMember(
-		memberId: string
-	): Promise<FrontHistoryEntry[]> {
-		const response = await fetch(
-			`/api/front-history/${encodeURIComponent(memberId)}`
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load member front history: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as FrontHistoryEntry[];
-	}
-
-	async getCurrentFronting(): Promise<FrontHistoryEntry[]> {
-		const response = await fetch('/api/front-history/current');
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load current fronting: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as FrontHistoryEntry[];
-	}
-
-	async updateFrontHistoryNote(
-		id: string,
-		note: string
-	): Promise<void> {
-		const response = await fetch(
-			`/api/front-history/${encodeURIComponent(id)}`,
-			{
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					note
-				})
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update front history note: ${response.status} ${response.statusText}`
-			);
-		}
-	}
-
-	async deleteFrontHistoryEntry(id: string): Promise<void> {
-		const response = await fetch(
-			`/api/front-history/${encodeURIComponent(id)}`,
-			{
-				method: 'DELETE'
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to delete front history entry: ${response.status} ${response.statusText}`
-			);
-		}
-	}
-
-	async getChatMessages(): Promise<ChatMessage[]> {
-	const response = await fetch('/api/chat');
-
-	if (!response.ok) {
-		throw new Error(
-			`Failed to load chat messages (${response.status}).`
-		);
-	}
-
-	const data = await response.json();
-
-	return data.messages;
-}
-
-async createChatMessage(
-	senderMemberId: string,
-	message: string
-): Promise<ChatMessage> {
-	const response = await fetch('/api/chat', {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify({
-			senderMemberId,
-			message
-		})
-	});
-
-	if (!response.ok) {
-		const data = await response.json().catch(() => null);
-
-		throw new Error(
-			data?.error ??
-				`Failed to create chat message (${response.status}).`
-		);
-	}
-
-	const data = await response.json();
-
-	return data.message;
-}
-
-async updateChatMessage(
-	id: string,
-	message: string
-): Promise<ChatMessage> {
-	const response = await fetch(
-		`/api/chat/${encodeURIComponent(id)}`,
-		{
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				message
-			})
-		}
-	);
-
-	if (!response.ok) {
-		const data = await response.json().catch(() => null);
-
-		throw new Error(
-			data?.error ??
-				`Failed to update chat message (${response.status}).`
-		);
-	}
-
-	const data = await response.json();
-
-	return data.message;
-}
-
-async deleteChatMessage(
-	id: string
-): Promise<void> {
-	const response = await fetch(
-		`/api/chat/${encodeURIComponent(id)}`,
-		{
-			method: 'DELETE'
-		}
-	);
-
-	if (!response.ok) {
-		const data = await response.json().catch(() => null);
-
-		throw new Error(
-			data?.error ??
-				`Failed to delete chat message (${response.status}).`
-		);
-	}
-}
-
-	async getJournalEntries(): Promise<JournalEntry[]> {
-		const response = await fetch('/api/journal');
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load journal entries: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as JournalEntry[];
-	}
-
-	async getJournalEntryById(
-		id: string
-	): Promise<JournalEntry | null> {
-		const response = await fetch(
-			`/api/journal/${encodeURIComponent(id)}`
-		);
-
-		if (response.status === 404) {
-			return null;
-		}
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load journal entry: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as JournalEntry;
-	}
-
-	async createJournalEntry(
-		entry: Omit<
-			JournalEntry,
-			'id' | 'createdAt' | 'updatedAt'
-		>
-	): Promise<JournalEntry> {
-		const response = await fetch('/api/journal', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(entry)
-		});
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to create journal entry: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as JournalEntry;
-	}
-
-	async updateJournalEntry(
-		id: string,
-		entry: Omit<
-			JournalEntry,
-			'id' | 'createdAt' | 'updatedAt'
-		>
-	): Promise<JournalEntry> {
-		const response = await fetch(
-			`/api/journal/${encodeURIComponent(id)}`,
-			{
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify(entry)
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update journal entry: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as JournalEntry;
-	}
-
-	async setJournalEntryPinned(
-		id: string,
-		isPinned: boolean
-	): Promise<JournalEntry> {
-		const response = await fetch(
-			`/api/journal/${encodeURIComponent(id)}/pin`,
-			{
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					isPinned
-				})
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update journal pin status: ${response.status} ${response.statusText}`
-			);
-		}
-
-		return (await response.json()) as JournalEntry;
-	}
-
-	async deleteJournalEntry(id: string): Promise<void> {
-		const response = await fetch(
-			`/api/journal/${encodeURIComponent(id)}`,
-			{
-				method: 'DELETE'
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to delete journal entry: ${response.status} ${response.statusText}`
-			);
-		}
-	}
-
-	async getPolls(): Promise<Poll[]> {
-		throw new Error('Web polls API is not available yet.');
-	}
-
-	async getPollResults(
-		pollId: string
-	): Promise<PollResults | null> {
-		void pollId;
-
-		throw new Error('Web poll API is not available yet.');
-	}
+  async getMembers(): Promise<Member[]> { requireUnlocked(); return listMemberRecords<Member>(); }
+  async getMemberById(memberId: string): Promise<Member | null> { requireUnlocked(); return loadMemberRecord<Member>(memberId); }
+  async deleteMember(memberId: string): Promise<void> { requireUnlocked(); await deleteMemberRecord(memberId); }
+  async updateMember(memberId: string, member: Member): Promise<Member> {
+    requireUnlocked(); if (memberId !== member.id) throw new Error('Member ID mismatch.');
+    await saveMemberRecord(member); return member;
+  }
+  async setMemberFronting(memberId: string, isFronting: boolean): Promise<void> {
+    requireUnlocked();
+    const member = await loadMemberRecord<Member>(memberId);
+    if (!member) throw new Error('Member not found in encrypted storage.');
+    if (member.isFronting === isFronting) return;
+    const at = now();
+    const entries = await list<FrontHistoryEntry>('front-history');
+    if (isFronting) {
+      const historyId = id();
+      await saveEncryptedRecord('front-history', historyId, { id: historyId, memberId, startedAt: at, endedAt: null, note: '' } satisfies FrontHistoryEntry);
+    } else {
+      for (const entry of entries.filter((item) => item.memberId === memberId && !item.endedAt)) {
+        await saveEncryptedRecord('front-history', entry.id, { ...entry, endedAt: at });
+      }
+    }
+    await saveMemberRecord({ ...member, isFronting });
+  }
+
+  async importAmpersandData(data: AmpersandImportData): Promise<AmpersandImportResult> {
+    requireUnlocked();
+    for (const item of data.members) await saveMemberRecord(item.member);
+    for (const entry of data.frontHistory) await saveEncryptedRecord('front-history', entry.id, entry);
+    return { memberCount: data.members.length, frontHistoryCount: data.frontHistory.length, imageCount: data.summary.memberImages, bannerCount: data.summary.memberBanners };
+  }
+  async importPluralSpaceData(data: PluralSpaceImportData): Promise<AmpersandImportResult> {
+    requireUnlocked();
+    const customByMember = new Map<string, PluralSpaceImportData['customFields']>();
+    for (const field of data.customFields) customByMember.set(field.memberId, [...(customByMember.get(field.memberId) ?? []), field]);
+    for (const sourceMember of data.members) {
+      const fields = customByMember.get(sourceMember.id) ?? [];
+      const member: Member = { ...sourceMember, customFields: [...(sourceMember.customFields ?? []), ...fields] };
+      await saveMemberRecord(member);
+    }
+    for (const entry of data.frontHistory) await saveEncryptedRecord('front-history', entry.id, entry);
+    for (const entry of data.journalEntries) {
+      const journal: JournalEntry = { ...entry, entryType: 'journal', tags: [], isPinned: entry.isPinned, authorMemberId: entry.authorMemberId, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
+      await saveEncryptedRecord('journal', journal.id, journal);
+    }
+    // Embedded media remains client-side. Preserve it inside the encrypted member record where possible.
+    return { memberCount: data.members.length, frontHistoryCount: data.frontHistory.length, imageCount: 0, bannerCount: 0 };
+  }
+
+  async getFrontHistory(): Promise<FrontHistoryEntry[]> { return (await list<FrontHistoryEntry>('front-history')).sort((a,b) => b.startedAt.localeCompare(a.startedAt)); }
+  async getFrontHistoryForMember(memberId: string): Promise<FrontHistoryEntry[]> { return (await this.getFrontHistory()).filter((entry) => entry.memberId === memberId); }
+  async getCurrentFronting(): Promise<FrontHistoryEntry[]> { return (await this.getFrontHistory()).filter((entry) => !entry.endedAt); }
+  async updateFrontHistoryNote(entryId: string, note: string): Promise<void> {
+    requireUnlocked(); const entry = await loadEncryptedRecord<FrontHistoryEntry>('front-history', entryId);
+    if (!entry) throw new Error('Front-history entry not found.');
+    await saveEncryptedRecord('front-history', entryId, { ...entry, note });
+  }
+  async deleteFrontHistoryEntry(entryId: string): Promise<void> { requireUnlocked(); await deleteEncryptedRecord('front-history', entryId); }
+
+  async getChatMessages(): Promise<ChatMessage[]> { return (await list<ChatMessage>('chat-message')).sort((a,b) => a.createdAt.localeCompare(b.createdAt)); }
+  async createChatMessage(senderMemberId: string, message: string): Promise<ChatMessage> {
+    requireUnlocked(); const text = message.trim(); if (!text) throw new Error('Chat messages cannot be empty.');
+    const entry: ChatMessage = { id: id(), senderMemberId, message: text, createdAt: now(), editedAt: null };
+    await saveEncryptedRecord('chat-message', entry.id, entry); return entry;
+  }
+  async updateChatMessage(messageId: string, message: string): Promise<ChatMessage> {
+    requireUnlocked(); const text = message.trim(); if (!text) throw new Error('Chat messages cannot be empty.');
+    const previous = await loadEncryptedRecord<ChatMessage>('chat-message', messageId); if (!previous) throw new Error('Chat message not found.');
+    const updated = { ...previous, message: text, editedAt: now() }; await saveEncryptedRecord('chat-message', messageId, updated); return updated;
+  }
+  async deleteChatMessage(messageId: string): Promise<void> { requireUnlocked(); await deleteEncryptedRecord('chat-message', messageId); }
+
+  async getJournalEntries(): Promise<JournalEntry[]> { return (await list<JournalEntry>('journal')).sort((a,b) => Number(b.isPinned)-Number(a.isPinned) || b.createdAt.localeCompare(a.createdAt)); }
+  async getJournalEntryById(entryId: string): Promise<JournalEntry | null> { requireUnlocked(); return loadEncryptedRecord<JournalEntry>('journal', entryId); }
+  async createJournalEntry(entry: Omit<JournalEntry, 'id'|'createdAt'|'updatedAt'>): Promise<JournalEntry> {
+    requireUnlocked(); const at = now(); const created: JournalEntry = { ...entry, id: id(), createdAt: at, updatedAt: at }; await saveEncryptedRecord('journal', created.id, created); return created;
+  }
+  async updateJournalEntry(entryId: string, entry: Omit<JournalEntry, 'id'|'createdAt'|'updatedAt'>): Promise<JournalEntry> {
+    requireUnlocked(); const previous = await loadEncryptedRecord<JournalEntry>('journal', entryId); if (!previous) throw new Error('Journal entry not found.');
+    const updated: JournalEntry = { ...entry, id: entryId, createdAt: previous.createdAt, updatedAt: now() }; await saveEncryptedRecord('journal', entryId, updated); return updated;
+  }
+  async setJournalEntryPinned(entryId: string, isPinned: boolean): Promise<JournalEntry> {
+    requireUnlocked(); const entry = await loadEncryptedRecord<JournalEntry>('journal', entryId); if (!entry) throw new Error('Journal entry not found.');
+    const updated = { ...entry, isPinned, updatedAt: now() }; await saveEncryptedRecord('journal', entryId, updated); return updated;
+  }
+  async deleteJournalEntry(entryId: string): Promise<void> { requireUnlocked(); await deleteEncryptedRecord('journal', entryId); }
+
+  async getPolls(): Promise<Poll[]> { return (await list<Poll>('poll')).sort((a,b) => b.createdAt.localeCompare(a.createdAt)); }
+  async getPollResults(pollId: string): Promise<PollResults | null> {
+    requireUnlocked(); const poll = await loadEncryptedRecord<Poll>('poll', pollId); if (!poll) return null;
+    const votes = (poll as Poll & { votes?: Array<{ optionId: string; memberId: string }> }).votes ?? [];
+    const options = poll.options.map((option) => ({ ...option, voteCount: votes.filter((vote) => vote.optionId === option.id).length }));
+    return { ...poll, options, totalVotes: votes.length };
+  }
 }
