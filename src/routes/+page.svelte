@@ -76,10 +76,9 @@
 	</a>
 
 <a href="/communities" class="top-nav-link">
-	<span>✦</span>
-	communities
+    <span>✦</span>
+    communities
 </a>
-
 
 	<a href="/chat" class="top-nav-link">
 		<span>❧</span>
@@ -96,9 +95,10 @@
 		import
 	</a>
 
-	<a href="/sharing" class="top-nav-link">
-	<span>♢</span>
-	<span>sharing</span>
+<a href="/sharing" class="top-nav-link">
+    <span>♢</span>
+    sharing
+</a>
 </a>
 </nav>
 		<!-- =================================================
@@ -5022,6 +5022,45 @@ max-width: 100%;
 	.card-content strong {
 		font-size: 1.7rem;
 	}
+}
+
+/* =========================================================
+   HOMEPAGE NAVIGATION — CONSISTENT LAYOUT
+   ========================================================= */
+
+.top-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.top-navigation .top-nav-link {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* Keep every link readable on smaller screens */
+@media (max-width: 900px) {
+    .top-navigation {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .top-navigation .top-nav-link {
+        justify-content: center;
+        padding: 9px 5px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .top-navigation {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 </style>
