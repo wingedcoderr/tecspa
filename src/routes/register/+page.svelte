@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { generateMasterKey, wrapMasterKey } from '$lib/crypto/e2ee';
+	import { setMasterKey } from '$lib/crypto/session';
 
 	let email = '';
 	let username = '';
@@ -57,9 +59,23 @@
 				return;
 			}
 
+			const masterKey = await generateMasterKey();
+			const wrapped = await wrapMasterKey(masterKey, password);
+
+			const keyResponse = await fetch('/api/crypto/key', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ key: wrapped })
+			});
+
+			if (!keyResponse.ok) {
+				throw new Error('Unable to initialize account encryption.');
+			}
+
+			setMasterKey(masterKey);
 			await goto('/account');
 		} catch {
-			error = 'Unable to connect to TECSPA.';
+			error = 'Your account was created, but encryption could not be initialized. Please try signing in again.';
 		} finally {
 			loading = false;
 		}

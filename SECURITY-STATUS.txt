@@ -1,0 +1,10 @@
+TECSPA security status
+
+This archive contains the current TECSPA source plus the client-side E2EE foundation in:
+  src/lib/crypto/e2ee.ts
+
+IMPORTANT: the existing web API is NOT yet fully end-to-end encrypted. Existing PostgreSQL APIs still handle plaintext application data. The encryption foundation is deliberately not wired into those APIs yet, because doing so safely requires a coordinated migration of data storage, authentication/key recovery, sharing, media, and all affected client/server routes.
+
+See docs/SECURITY.md for the architecture and migration plan.
+
+Secrets and .git history were intentionally excluded from this distribution archive.

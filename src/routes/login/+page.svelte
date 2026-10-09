@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
+	import { generateMasterKey, wrapMasterKey } from '$lib/crypto/e2ee';
+	import { setMasterKey } from '$lib/crypto/session';
 
 	let email = '';
 	let password = '';
@@ -39,9 +42,43 @@
 				return;
 			}
 
+			const keyResponse = await fetch('/api/crypto/key');
+			const keyData = await keyResponse.json();
+
+			if (!keyResponse.ok) {
+				error =
+					typeof keyData.error === 'string'
+						? keyData.error
+						: 'Unable to initialize account encryption.';
+				return;
+			}
+
+			if (keyData.initialized) {
+				const masterKey = await unwrapMasterKey(
+					keyData.key as EncryptedPayload,
+					password
+				);
+				setMasterKey(masterKey);
+			} else {
+				const masterKey = await generateMasterKey();
+				const wrapped = await wrapMasterKey(masterKey, password);
+
+				const saveResponse = await fetch('/api/crypto/key', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ key: wrapped })
+				});
+
+				if (!saveResponse.ok) {
+					throw new Error('Unable to save account encryption key.');
+				}
+
+				setMasterKey(masterKey);
+			}
+
 			await goto('/account');
 		} catch {
-			error = 'Unable to connect to TECSPA.';
+			error = 'Unable to unlock your TECSPA encryption key. Check your password and try again.';
 		} finally {
 			loading = false;
 		}

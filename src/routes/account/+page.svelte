@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { clearMasterKey } from '$lib/crypto/session';
 
 	interface Account {
 		id: string;
@@ -44,6 +45,7 @@
 				throw new Error('Logout failed');
 			}
 
+			clearMasterKey();
 			await goto('/login');
 		} catch {
 			error = 'Unable to sign out.';
