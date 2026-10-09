@@ -14,6 +14,7 @@ import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
 	let loading = true;
 	let errorMessage = '';
 	let migrationMessage = '';
+	let memberMigrationMessage = '';
 	let migrating = false;
 	let unlockNeeded = false;
 	let unlockPassword = '';
@@ -65,33 +66,50 @@ import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
 		if (!confirmed) return;
 
 		migrating = true;
-		migrationMessage = 'Reading existing member profiles…';
+		memberMigrationMessage = 'Reading existing member profiles…';
 		errorMessage = '';
 		try {
-			const response = await fetch('/api/members', { headers: { Accept: 'application/json' } });
+			const response = await fetch('/api/crypto/migrate-members', {
+				method: 'POST',
+				headers: {
+					Accept: 'application/json',
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ confirm: true }),
+				cache: 'no-store'
+			});
 			const payload = await response.json().catch(() => null);
 			if (!response.ok) {
 				throw new Error(payload?.message ?? payload?.error ?? `Could not read existing members (${response.status}).`);
 			}
-			if (!Array.isArray(payload)) {
-				throw new Error('The legacy member endpoint returned an unexpected response. No records were migrated.');
+			if (!Array.isArray(payload?.members)) {
+				throw new Error('The migration endpoint returned an unexpected response. No records were migrated.');
 			}
-			const legacyMembers = payload as Member[];
+			const legacyMembers = payload.members as Member[];
 			if (legacyMembers.some((member) => !member || typeof member.id !== 'string' || !member.id)) {
 				throw new Error('At least one legacy member has an invalid ID. No records were migrated.');
 			}
 			for (let index = 0; index < legacyMembers.length; index += 1) {
 				const member = legacyMembers[index];
-				migrationMessage = `Encrypting member ${index + 1} of ${legacyMembers.length}…`;
+				memberMigrationMessage = `Encrypting member ${index + 1} of ${legacyMembers.length}…`;
 				await saveMemberRecord(member);
 			}
-			members = await getDataAdapter().getMembers();
-			migrationMessage = legacyMembers.length
-				? `Encrypted ${legacyMembers.length} member profile(s). Original database rows were preserved.`
-				: 'The legacy database returned no members. No records were changed.';
+			const verifiedMembers = await getDataAdapter().getMembers();
+			const verifiedById = new Map(verifiedMembers.map((member) => [member.id, member]));
+			const missingOrMismatched = legacyMembers.filter((member) => {
+				const saved = verifiedById.get(member.id);
+				return !saved || saved.name !== member.name;
+			});
+			if (missingOrMismatched.length > 0) {
+				throw new Error(`Verification failed for ${missingOrMismatched.length} member profile(s). You can safely retry; original database rows were preserved.`);
+			}
+			members = verifiedMembers;
+			memberMigrationMessage = legacyMembers.length
+				? `Encrypted and verified ${legacyMembers.length} member profile(s). Original database rows were preserved.`
+				: 'No unmigrated legacy member profiles were found. No records were changed.';
 		} catch (error) {
 			console.error('Member vault migration failed:', error);
-			migrationMessage = `Migration stopped: ${String(error)}. Original database rows were preserved; any encrypted copies already written remain in the vault.`;
+			memberMigrationMessage = `Migration stopped: ${String(error)}. Original database rows were preserved; any encrypted copies already written remain in the vault.`;
 		} finally {
 			migrating = false;
 		}
@@ -405,6 +423,14 @@ async function toggleFronting(member: Member) {
 					{members.length === 1 ? 'member' : 'members'}
 					in the system
 				</p>
+				{#if members.length > 0 && !isDesktop()}
+					<div class="media-migration">
+						<button type="button" on:click={migrateExistingMembers} disabled={migrating}>
+							{migrating ? 'encrypting profiles…' : 'migrate remaining legacy profiles'}
+						</button>
+						{#if memberMigrationMessage}<p role="status">{memberMigrationMessage}</p>{/if}
+					</div>
+				{/if}
 			</section>
 
 			{#if currentFronters.length > 0}
@@ -460,7 +486,7 @@ async function toggleFronting(member: Member) {
 				<button type="button" on:click={migrateExistingMembers} disabled={migrating}>
 					{migrating ? 'encrypting profiles…' : 'migrate existing member profiles'}
 				</button>
-				{#if migrationMessage}<p role="status">{migrationMessage}</p>{/if}
+				{#if memberMigrationMessage}<p role="status">{memberMigrationMessage}</p>{/if}
 			{/if}
 			<a href="/members/new">create a new member →</a>
 		</div>
