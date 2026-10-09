@@ -28,6 +28,10 @@ export const POST: RequestHandler = async ({ cookies, params, request }) => {
   const content=typeof body.content==='string'?body.content.trim():'';
   const displayName=typeof body.displayName==='string'?body.displayName.trim().slice(0,80):'';
   const contentMode=body.contentMode==='encrypted'?'encrypted':'public_plaintext';
+  if (typeof body.memberId === 'string' && body.memberId.length) {
+    const ownedMember = await pool.query(`SELECT 1 FROM e2ee_vault_records WHERE system_id=$1 AND record_type='member' AND record_id=$2`, [system.id, body.memberId]);
+    if (!ownedMember.rowCount) return json({error:'The selected posting identity does not belong to this system.'},{status:403});
+  }
   if (!channelId || !content || content.length>12000 || !displayName) return json({error:'Channel, display name, and message (up to 12,000 characters) are required.'},{status:400});
   // Encrypted payloads may be stored, but decryption/key sharing is client responsibility; private communities remain disabled until recipient-key exchange exists.
   const channel=await pool.query(`SELECT c.visibility FROM community_channels ch JOIN communities c ON c.id=ch.community_id WHERE ch.id=$1 AND ch.community_id=$2 AND c.status='active'`,[channelId,params.communityId]);

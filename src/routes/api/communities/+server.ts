@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
        COALESCE(m.role,'visitor') AS role,
        COALESCE(m.status,'visitor') AS membership_status,
        (SELECT COUNT(*)::int FROM community_memberships cm WHERE cm.community_id=c.id AND cm.status='active') AS member_count
-     FROM communities c LEFT JOIN community_memberships m ON m.community_id=c.id AND m.system_id=$1
+     FROM communities c LEFT JOIN community_memberships m ON m.community_id=c.id AND m.system_id=$1 AND m.status='active'
      WHERE c.status='active' AND (c.visibility='public' OR (m.status='active'))
      ORDER BY c.created_at DESC LIMIT 200`, [system.id]);
   return json({ communities: result.rows });

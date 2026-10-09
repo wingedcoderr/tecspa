@@ -1,0 +1,5 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getAuthenticatedSystem } from '$lib/server/system';
+import { pool } from '$lib/server/db/postgres';
+export const DELETE:RequestHandler=async({cookies,params})=>{const {system}=await getAuthenticatedSystem(cookies);const p=await pool.query(`SELECT p.author_system_id,c.owner_system_id,m.role FROM community_posts p JOIN communities c ON c.id=p.community_id LEFT JOIN community_memberships m ON m.community_id=c.id AND m.system_id=$3 AND m.status='active' WHERE p.id=$1 AND p.community_id=$2`,[params.postId,params.communityId,system.id]);if(!p.rowCount)return json({error:'Post not found.'},{status:404});const row=p.rows[0];if(row.author_system_id!==system.id&&row.owner_system_id!==system.id&&!['owner','moderator'].includes(row.role))return json({error:'You do not have permission to remove this post.'},{status:403});await pool.query(`UPDATE community_posts SET status='removed',updated_at=NOW() WHERE id=$1`,[params.postId]);return json({removed:true});};

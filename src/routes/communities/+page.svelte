@@ -1,82 +1,32 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { getMasterKey } from '$lib/crypto/session';
-	import { listMemberRecords } from '$lib/crypto/vault';
-
-	type Member = { id: string; name: string; avatar?: string | null };
-	type Post = { id: string; author: string; text: string; createdAt: string };
-	type Channel = { id: string; name: string; posts: Post[] };
-	type Community = { id: string; name: string; description: string; visibility: 'Public' | 'Private'; channels: Channel[] };
-
-	// Start empty: demo/test communities are intentionally not seeded.
-	let communities: Community[] = [];
-	let selectedCommunityId = '';
-	let selectedChannelId = '';
-	let members: Member[] = [];
-	let selectedMemberId = 'system';
-	let postText = '';
-	let communityName = '';
-	let communityDescription = '';
-	let communityVisibility: 'Public' | 'Private' = 'Public';
-	let channelName = '';
-	let showCreateCommunity = false;
-	let showCreateChannel = false;
-	let notice = 'Communities are a local prototype: changes are not saved or synced yet.';
-
-	$: selectedCommunity = communities.find((c) => c.id === selectedCommunityId) ?? communities[0];
-	$: selectedChannel = selectedCommunity?.channels.find((c) => c.id === selectedChannelId) ?? selectedCommunity?.channels[0];
-	$: selectedMember = members.find((m) => m.id === selectedMemberId);
-
-	onMount(async () => {
-		if (!getMasterKey()) {
-			notice = 'Unlock TECSPA encryption to load your member identities. The community demo itself is not encrypted or synced yet.';
-			return;
-		}
-		try {
-			const records = await listMemberRecords();
-			members = records.map((record: any) => ({ id: record.id, name: record.data?.name ?? 'Unnamed member', avatar: record.data?.avatar ?? null }));
-			if (members.length) selectedMemberId = members[0].id;
-		} catch {
-			notice = 'Could not load member identities. You can still explore the community prototype.';
-		}
-	});
-
-	function selectCommunity(id: string) {
-		selectedCommunityId = id;
-		selectedChannelId = communities.find((c) => c.id === id)?.channels[0]?.id ?? '';
-	}
-
-	function createCommunity() {
-		const name = communityName.trim();
-		if (!name) return;
-		const id = `community-${Date.now()}`;
-		communities = [...communities, { id, name, description: communityDescription.trim() || 'A new community space.', visibility: communityVisibility, channels: [{ id: 'general', name: 'general', posts: [] }] }];
-		selectCommunity(id);
-		communityName = '';
-		communityDescription = '';
-		communityVisibility = 'Public';
-		showCreateCommunity = false;
-		notice = 'Created locally for this demo only. Backend persistence is not implemented yet.';
-	}
-
-	function createChannel() {
-		const name = channelName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-		if (!name || !selectedCommunity) return;
-		if (selectedCommunity.channels.some((c) => c.name === name)) { notice = 'That channel already exists.'; return; }
-		const channel = { id: `channel-${Date.now()}`, name, posts: [] };
-		communities = communities.map((c) => c.id === selectedCommunity.id ? { ...c, channels: [...c.channels, channel] } : c);
-		selectedChannelId = channel.id;
-		channelName = '';
-		showCreateChannel = false;
-	}
-
-	function submitPost() {
-		const text = postText.trim();
-		if (!text || !selectedCommunity || !selectedChannel) return;
-		const post: Post = { id: `post-${Date.now()}`, author: selectedMember?.name ?? 'System', text, createdAt: 'Just now' };
-		communities = communities.map((c) => c.id !== selectedCommunity.id ? c : { ...c, channels: c.channels.map((ch) => ch.id === selectedChannel.id ? { ...ch, posts: [...ch.posts, post] } : ch) });
-		postText = '';
-	}
+ import { onMount } from 'svelte';
+ import { getMasterKey } from '$lib/crypto/session';
+ import { listMemberRecords } from '$lib/crypto/vault';
+ type Member={id:string;name:string;avatar?:string|null};
+ type Post={id:string;author:string;text:string;createdAt:string;memberId?:string|null;parentPostId?:string|null;reactionCount?:number};
+ type Channel={id:string;name:string;posts:Post[]};
+ type Community={id:string;name:string;description:string;visibility:'Public'|'Private';channels:Channel[];role?:string;memberCount?:number;membershipStatus?:string};
+ let communities:Community[]=[]; let selectedCommunityId=''; let selectedChannelId=''; let members:Member[]=[]; let selectedMemberId='system'; let postText=''; let communityName=''; let communityDescription=''; let communityVisibility:'Public'|'Private'='Public'; let channelName=''; let showCreateCommunity=false; let showCreateChannel=false; let notice='Loading communities…'; let busy=false; let replyToPostId='';
+ $: selectedCommunity=communities.find(c=>c.id===selectedCommunityId)??communities[0];
+ $: selectedChannel=selectedCommunity?.channels.find(c=>c.id===selectedChannelId)??selectedCommunity?.channels[0];
+ $: selectedMember=members.find(m=>m.id===selectedMemberId);
+ const api=async(path:string,init:RequestInit={})=>{const res=await fetch(path,{...init,headers:{'content-type':'application/json',...(init.headers??{})},credentials:'same-origin'});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error??`Request failed (${res.status})`);return data;};
+ const fromCommunity=(r:any):Community=>({id:r.id,name:r.name,description:r.description??'',visibility:r.visibility==='private'?'Private':'Public',channels:[],role:r.role,memberCount:Number(r.member_count??0),membershipStatus:r.membership_status});
+ const fromPost=(r:any):Post=>({id:r.id,author:r.author_display_name??'System',text:r.content??'',createdAt:new Date(r.created_at).toLocaleString(),memberId:r.author_member_id,parentPostId:r.parent_post_id,reactionCount:Number(r.reaction_count??0)});
+ async function loadPosts(){if(!selectedCommunity||!selectedChannel)return;const data=await api(`/api/communities/${encodeURIComponent(selectedCommunity.id)}/posts?channelId=${encodeURIComponent(selectedChannel.id)}`);const posts=(data.posts??[]).map(fromPost);communities=communities.map(c=>c.id!==selectedCommunity.id?c:{...c,channels:c.channels.map(ch=>ch.id===selectedChannel.id?{...ch,posts}:ch)});}
+ async function loadCommunity(id:string){const data=await api(`/api/communities/${encodeURIComponent(id)}`);const c=fromCommunity(data.community);c.channels=(data.channels??[]).map((ch:any)=>({id:ch.id,name:ch.name,posts:[]}));communities=communities.map(old=>old.id===id?c:old);selectedCommunityId=id;selectedChannelId=c.channels[0]?.id??'';if(selectedChannelId)await loadPosts();}
+ async function refreshCommunities(){const data=await api('/api/communities');communities=(data.communities??[]).map(fromCommunity);if(communities.length){const keep=communities.some(c=>c.id===selectedCommunityId)?selectedCommunityId:communities[0].id;await loadCommunity(keep);}else{selectedCommunityId='';selectedChannelId='';}notice='Communities are synced with your TECSPA account.';}
+ onMount(async()=>{try{await refreshCommunities();}catch(e){notice=e instanceof Error?e.message:'Could not load communities. Sign in and try again.';}if(getMasterKey()){try{const records=await listMemberRecords();members=records.map((r:any)=>({id:r.id,name:r.data?.name??'Unnamed member',avatar:r.data?.avatar??null}));if(members.length)selectedMemberId=members[0].id;}catch{notice+=' Member identities could not be decrypted; posting as your system remains available.';}}else{notice+=' Unlock encryption to select a member identity.';}});
+ async function selectCommunity(id:string){try{await loadCommunity(id);notice='Community loaded.';}catch(e){notice=e instanceof Error?e.message:'Could not load community.';}}
+ async function createCommunity(){const name=communityName.trim();if(!name)return;busy=true;try{const data=await api('/api/communities',{method:'POST',body:JSON.stringify({name,description:communityDescription.trim(),visibility:communityVisibility.toLowerCase()})});communityName='';communityDescription='';communityVisibility='Public';showCreateCommunity=false;await refreshCommunities();await selectCommunity(data.community.id);notice='Community created and saved to TECSPA.';}catch(e){notice=e instanceof Error?e.message:'Could not create community.';}finally{busy=false;}}
+ async function createChannel(){const name=channelName.trim();if(!name||!selectedCommunity)return;busy=true;try{await api(`/api/communities/${selectedCommunity.id}/channels`,{method:'POST',body:JSON.stringify({name})});channelName='';showCreateChannel=false;await loadCommunity(selectedCommunity.id);notice='Channel created.';}catch(e){notice=e instanceof Error?e.message:'Could not create channel.';}finally{busy=false;}}
+ async function submitPost(){const text=postText.trim();if(!text||!selectedCommunity||!selectedChannel)return;busy=true;try{await api(`/api/communities/${selectedCommunity.id}/posts`,{method:'POST',body:JSON.stringify({channelId:selectedChannel.id,content:text,displayName:selectedMember?.name??'System',memberId:selectedMemberId==='system'?null:selectedMemberId,parentPostId:replyToPostId||null})});postText='';replyToPostId='';await loadPosts();notice='Post saved.';}catch(e){notice=e instanceof Error?e.message:'Could not publish post.';}finally{busy=false;}}
+ async function react(post:Post){if(!selectedCommunity)return;try{await api(`/api/communities/${selectedCommunity.id}/posts/${post.id}/reactions`,{method:'POST',body:JSON.stringify({reaction:'heart'})});await loadPosts();}catch(e){notice=e instanceof Error?e.message:'Could not react.';}}
+ async function reply(post:Post){replyToPostId=post.id;postText='';const box=document.querySelector('.composer textarea') as HTMLTextAreaElement|null;box?.focus();}
+ async function reportPost(post:Post){if(!selectedCommunity)return;const reason=prompt('Why are you reporting this post?');if(!reason)return;try{await api(`/api/communities/${selectedCommunity.id}/posts/${post.id}/report`,{method:'POST',body:JSON.stringify({reason})});notice='Report submitted to community moderators.';}catch(e){notice=e instanceof Error?e.message:'Could not report post.';}}
+ async function removePost(post:Post){if(!selectedCommunity||!confirm('Remove this post?'))return;try{await api(`/api/communities/${selectedCommunity.id}/posts/${post.id}`,{method:'DELETE'});await loadPosts();notice='Post removed.';}catch(e){notice=e instanceof Error?e.message:'Could not remove post.';}}
+ async function joinCommunity(){if(!selectedCommunity)return;try{await api(`/api/communities/${selectedCommunity.id}`,{method:'POST'});await refreshCommunities();notice='Joined community.';}catch(e){notice=e instanceof Error?e.message:'Could not join community.';}}
+ async function leaveCommunity(){if(!selectedCommunity||!confirm('Leave this community?'))return;try{await api(`/api/communities/${selectedCommunity.id}`,{method:'DELETE'});await refreshCommunities();notice='Left community.';}catch(e){notice=e instanceof Error?e.message:'Could not leave community.';}}
 </script>
 
 <svelte:head>
@@ -99,7 +49,7 @@
 			<div class="eyebrow">TECSPA COMMUNITIES</div>
 			<h1>{selectedCommunity?.name ?? 'Your communities'}</h1>
 			<p>{selectedCommunity?.description ?? 'Create a space for your interests, meet other systems, and choose how you participate.'}</p>
-			{#if selectedCommunity}<span class="visibility">{selectedCommunity.visibility === 'Private' ? '🔒 Private space' : '◉ Public community'}</span>{/if}
+			{#if selectedCommunity}<span class="visibility">{selectedCommunity.visibility === 'Private' ? '🔒 Private space' : '◉ Public community'} · {selectedCommunity.memberCount ?? 0} members</span>{#if selectedCommunity.role === 'visitor'}<button class="sidebar-action" onclick={joinCommunity}>＋ Join community</button>{:else if selectedCommunity.role !== 'owner'}<button class="sidebar-action" onclick={leaveCommunity}>Leave community</button>{/if}{/if}
 		</div>
 		{#if showCreateCommunity}
 			<form class="create-form" onsubmit={(event) => { event.preventDefault(); createCommunity(); }}>
@@ -132,14 +82,14 @@
 				<div class="empty-state"><div class="empty-symbol">✧</div><h3>A little quiet in here</h3><p>Start the conversation whenever you're ready.</p></div>
 			{:else}
 				{#each selectedChannel?.posts ?? [] as post}
-					<article class="post"><div class="post-avatar">{post.author.slice(0, 1).toUpperCase()}</div><div class="post-body"><div class="post-meta"><strong>{post.author}</strong><span>{post.createdAt}</span></div><p>{post.text}</p><div class="post-actions"><button title="React" onclick={() => notice = 'Reactions are planned for a later iteration.'}>♡ React</button><button title="Reply" onclick={() => notice = 'Threaded replies are planned for a later iteration.'}>↩ Reply</button></div></div></article>
+					<article class="post"><div class="post-avatar">{post.author.slice(0, 1).toUpperCase()}</div><div class="post-body"><div class="post-meta"><strong>{post.author}</strong><span>{post.createdAt}</span></div><p>{post.text}</p><div class="post-actions"><button title="React with a heart" onclick={() => react(post)}>♡ React ({post.reactionCount ?? 0})</button><button title="Reply" onclick={() => reply(post)}>↩ Reply</button><button title="Report post" onclick={() => reportPost(post)}>⚑ Report</button>{#if selectedCommunity?.role === 'owner' || selectedCommunity?.role === 'moderator' || post.memberId === selectedMemberId}<button title="Remove post" onclick={() => removePost(post)}>Remove</button>{/if}</div></div></article>
 				{/each}
 			{/if}
 		</section>
 		{#if selectedCommunity && selectedChannel}<form class="composer" onsubmit={(event) => { event.preventDefault(); submitPost(); }}>
-			<div class="posting-as"><span>POSTING AS</span><select bind:value={selectedMemberId} aria-label="Choose member identity"><option value="system">System</option>{#each members as member}<option value={member.id}>{member.name}</option>{/each}</select><span class="privacy-note">Only the selected display name appears in this prototype.</span></div>
+			<div class="posting-as"><span>POSTING AS</span><select bind:value={selectedMemberId} aria-label="Choose member identity"><option value="system">System</option>{#each members as member}<option value={member.id}>{member.name}</option>{/each}</select><span class="privacy-note">Only this display name is shown publicly; private system fields are not shared.</span></div>{#if replyToPostId}<div class="replying-to">Replying to a post · <button type="button" class="quiet" onclick={() => replyToPostId = ''}>Cancel reply</button></div>{/if}
 			<textarea bind:value={postText} maxlength="4000" placeholder={`Message #${selectedChannel?.name ?? 'general'}…`} aria-label="Write a post"></textarea>
-			<div class="composer-footer"><span>{postText.length}/4000 · Be kind to each other.</span><button type="submit" class="primary" disabled={!postText.trim()}>Post message ↗</button></div>
+			<div class="composer-footer"><span>{postText.length}/4000 · Be kind to each other.</span><button type="submit" class="primary" disabled={!postText.trim() || busy}>{replyToPostId ? 'Send reply ↗' : 'Post message ↗'}</button></div>
 		</form>{/if}
 	</main>
 </div>
@@ -166,7 +116,7 @@
 	.feed { flex: 1; padding: 22px 28px; }.post { display: flex; gap: 13px; padding: 17px 0; border-bottom: 1px solid var(--c-border); }.post-avatar { flex: 0 0 38px; height: 38px; display: grid; place-items: center; border-radius: 13px; background: color-mix(in srgb, var(--c-accent) 22%, var(--c-panel-2)); color: var(--c-accent); font-weight: 800; }.post-body { min-width: 0; flex: 1; }.post-meta { display: flex; align-items: baseline; gap: 10px; }.post-meta strong { font-size: 13px; }.post-meta span { font-size: 10px; color: var(--c-muted); }.post-body p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.65; margin: 8px 0 10px; }.post-actions { display: flex; gap: 13px; }.post-actions button { border: 0; background: transparent; color: var(--c-muted); font-size: 10px; padding: 0; }
 	.empty-state { text-align: center; padding: 70px 20px; color: var(--c-muted); }.empty-symbol { font-size: 42px; color: var(--c-accent); }.empty-state h3 { color: var(--c-text); margin-bottom: 7px; }.empty-state p { font-size: 12px; }
 	.composer { margin: auto 28px 26px; padding: 15px; border: 1px solid var(--c-border); border-radius: 14px; background: var(--c-panel); }.posting-as { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }.posting-as > span:first-child { color: var(--c-muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; }.posting-as select { max-width: 190px; border: 1px solid var(--c-border); border-radius: 7px; padding: 5px 8px; background: var(--c-panel-2); color: var(--c-text); font-size: 11px; }.privacy-note { color: var(--c-muted); font-size: 10px; }.composer textarea { display: block; resize: vertical; min-height: 70px; max-height: 220px; width: 100%; box-sizing: border-box; border: 0; outline: 0; color: var(--c-text); background: transparent; font-size: 13px; line-height: 1.6; }.composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid #ffffff10; color: var(--c-muted); font-size: 10px; }
-	.primary { border: 0; border-radius: 8px; padding: 9px 13px; background: var(--c-accent); color: #171321; font-weight: 800; font-size: 11px; }.primary:disabled { opacity: .45; cursor: not-allowed; }.quiet { border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 10px; background: transparent; color: var(--c-text); font-size: 11px; }
+	.replying-to { color: var(--c-muted); font-size: 11px; margin-bottom: 8px; }.primary { border: 0; border-radius: 8px; padding: 9px 13px; background: var(--c-accent); color: #171321; font-weight: 800; font-size: 11px; }.primary:disabled { opacity: .45; cursor: not-allowed; }.quiet { border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 10px; background: transparent; color: var(--c-text); font-size: 11px; }
 	.create-form { display: grid; gap: 10px; margin: 15px 0; }.create-form label { display: grid; gap: 5px; color: var(--c-muted); font-size: 10px; }.create-form input, .create-form textarea, .create-form select, .inline-create input { width: 100%; box-sizing: border-box; background: var(--c-panel-2); border: 1px solid var(--c-border); border-radius: 7px; padding: 8px; color: var(--c-text); font-size: 11px; }.create-form textarea { resize: vertical; min-height: 56px; }.form-actions { display: flex; justify-content: flex-end; gap: 7px; }.inline-create { display: flex; gap: 5px; margin-bottom: 10px; }.inline-create input { min-width: 0; }
 	@media (max-width: 850px) { .communities-page { grid-template-columns: 58px 210px minmax(0, 1fr); }.community-rail { padding-inline: 6px; }.community-sidebar { padding: 20px 12px; }.channel-header { padding: 16px; }.notice { margin: 14px 16px 0; }.feed { padding: 16px; }.composer { margin: auto 16px 16px; }.header-note { display: none; } }
 	@media (max-width: 620px) { .communities-page { grid-template-columns: 52px minmax(0, 1fr); }.community-sidebar { grid-column: 2; grid-row: 1; min-height: auto; border-right: 0; border-bottom: 1px solid var(--c-border); padding: 14px; }.community-heading h1 { font-size: 17px; }.community-heading p { margin-bottom: 6px; }.sidebar-action { margin: 12px 0; }.channels-title { margin-top: 8px; }.channel-list { display: flex; overflow-x: auto; }.channel-link { white-space: nowrap; }.sidebar-foot { display: none; }.community-main { grid-column: 2; min-height: 65vh; }.community-rail { grid-column: 1; grid-row: 1 / span 2; }.back-link { font-size: 9px; }.community-icon { width: 38px; height: 38px; border-radius: 12px; }.channel-header { min-height: 58px; }.composer-footer { align-items: flex-end; }.composer-footer span { max-width: 55%; line-height: 1.4; } }
