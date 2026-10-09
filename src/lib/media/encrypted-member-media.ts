@@ -41,5 +41,31 @@ export async function saveEncryptedMemberMediaDataUrl(memberId: string, kind: Me
   if (!dataUrl.startsWith('data:image/')) throw new Error('The selected image is not a valid image data URL.');
   const response = await fetch(dataUrl);
   const blob = await response.blob();
-  return saveEncryptedMemberMedia(memberId, kind, blob);
+  const reference = await saveEncryptedMemberMedia(memberId, kind, blob);
+  // Verify decryptability before the caller replaces the profile reference.
+  const decrypted = await resolveEncryptedMemberMedia(reference);
+  if (!decrypted.startsWith('data:image/')) throw new Error(`Could not verify encrypted ${kind} after saving it.`);
+  return reference;
+}
+
+/** Migrate one existing server-side image by encrypting it in this browser.
+ * The legacy object and legacy DB reference are never deleted by this function.
+ */
+export async function migrateLegacyMemberMedia(memberId: string, kind: MemberMediaKind): Promise<string> {
+  const response = await fetch(`/api/media/migration/${encodeURIComponent(memberId)}/${kind}`, {
+    method: 'GET',
+    headers: { Accept: 'image/*' },
+    cache: 'no-store'
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(detail || `Could not retrieve legacy ${kind} (${response.status}).`);
+  }
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/') || blob.size === 0) throw new Error(`The legacy ${kind} is not a valid image.`);
+  const reference = await saveEncryptedMemberMedia(memberId, kind, blob);
+  // Verify decryptability before the caller replaces the profile reference.
+  const decrypted = await resolveEncryptedMemberMedia(reference);
+  if (!decrypted.startsWith('data:image/')) throw new Error(`Could not verify encrypted ${kind} after saving it.`);
+  return reference;
 }

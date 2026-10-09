@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 import { getDataAdapter } from '$lib/db/data-adapter';
 import { memberImageUrl } from '$lib/media/member-media';
-	import { resolveEncryptedMemberMedia } from '$lib/media/encrypted-member-media';
+	import { resolveEncryptedMemberMedia, migrateLegacyMemberMedia } from '$lib/media/encrypted-member-media';
 import { isDesktop } from '$lib/platform';
 import type { Member } from '$lib/data/members';
 import { saveMemberRecord } from '$lib/crypto/vault';
@@ -206,6 +206,36 @@ async function toggleFronting(member: Member) {
 	}
 }
 
+	async function migrateExistingMemberImages() {
+		if (isDesktop() || migrating) return;
+		const candidates = members.filter((member) =>
+			(member.avatar && !member.avatar.startsWith('e2ee-media:') && !member.avatar.startsWith('data:') && !member.avatar.startsWith('http')) ||
+			(member.banner && !member.banner.startsWith('e2ee-media:') && !member.banner.startsWith('data:') && !member.banner.startsWith('http'))
+		);
+		if (!candidates.length) { migrationMessage = 'No legacy server-side image references were found in the encrypted member profiles.'; return; }
+		if (!window.confirm(`Migrate legacy images for up to ${candidates.length} member(s)? Images will be downloaded to this browser temporarily, encrypted before upload, and original server objects will be preserved. Continue?`)) return;
+		migrating = true; migrationMessage = 'Preparing encrypted media migration…'; errorMessage = '';
+		try {
+			for (let i = 0; i < candidates.length; i += 1) {
+				const original = candidates[i];
+				const updated = { ...original };
+				for (const kind of ['avatar', 'banner'] as const) {
+					const value = updated[kind];
+					if (!value || value.startsWith('e2ee-media:') || value.startsWith('data:') || value.startsWith('http')) continue;
+					migrationMessage = `Encrypting ${kind} for member ${i + 1} of ${candidates.length}…`;
+					updated[kind] = await migrateLegacyMemberMedia(original.id, kind);
+				}
+				await getDataAdapter().updateMember(original.id, updated);
+				members = members.map((item) => item.id === original.id ? updated : item);
+			}
+			await loadMemberDirectory();
+			migrationMessage = 'Migration finished. Encrypted copies were verified by saving them; original server-side objects were preserved.';
+		} catch (error) {
+			console.error('Legacy image migration stopped:', error);
+			migrationMessage = `Migration stopped: ${String(error)}. Original server-side images were not deleted; already encrypted copies remain available.`;
+		} finally { migrating = false; }
+	}
+
 	async function loadMemberDirectory() {
 	if (!isDesktop() && !hasMasterKey()) {
 		unlockNeeded = true;
@@ -357,6 +387,13 @@ async function toggleFronting(member: Member) {
 					<button type="submit" disabled={folderBusy || members.length === 0}>create folder</button>
 				</form>
 				<p class="folder-help">Each member belongs to one folder at a time. Folder assignments are saved inside the encrypted member profile.</p>
+				{#if !isDesktop()}
+					<div class="media-migration">
+						<p>Old server-stored avatars and banners can be migrated into encrypted media storage. Originals are kept.</p>
+						<button type="button" on:click={migrateExistingMemberImages} disabled={migrating}>{migrating ? 'encrypting existing images…' : 'migrate existing images to encrypted storage'}</button>
+						{#if migrationMessage}<p role="status">{migrationMessage}</p>{/if}
+					</div>
+				{/if}
 				{#if folderMessage}<p class="folder-status" role="status">{folderMessage}</p>{/if}
 			</section>
 

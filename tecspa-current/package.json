@@ -1,0 +1,50 @@
+{
+  "name": "tecspa",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "tauri",
+    "db:migrate": "node scripts/run-migration.mjs",
+    "db:security-check": "node scripts/security-check.mjs",
+    "e2ee:source-check": "node scripts/e2ee-source-check.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
+    "@tauri-apps/plugin-fs": "^2.6.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-sql": "^2.5.0",
+    "@vercel/analytics": "^2.0.1",
+    "better-sqlite3": "^13.0.3",
+    "dompurify": "^3.4.16",
+    "dotenv": "^18.0.5",
+    "fflate": "^0.8.3",
+    "marked": "^18.0.14",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/adapter-vercel": "^6.3.4",
+    "@sveltejs/kit": "^2.65.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tauri-apps/cli": "^2",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/dompurify": "^3.0.5",
+    "@types/pg": "^8.23.1",
+    "svelte": "^5.56.3",
+    "svelte-check": "^4.6.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}
