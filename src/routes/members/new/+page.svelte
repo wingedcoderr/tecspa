@@ -160,28 +160,8 @@ function updateCustomField(
 				await initializeDatabase();
 				await createMember(newMember);
 			} else {
-				const response = await fetch('/api/members', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify(newMember)
-				});
-
-				if (!response.ok) {
-	const data = await response.json().catch(() => null);
-
-	console.error('Create member API error:', {
-		status: response.status,
-		statusText: response.statusText,
-		data
-	});
-
-	throw new Error(
-		data?.error ??
-			`Failed to create member (${response.status} ${response.statusText}).`
-	);
-}
+				const { saveMemberRecord } = await import('$lib/crypto/vault');
+				await saveMemberRecord(newMember);
 			}
 
 			await goto('/members');

@@ -1,3 +1,5 @@
+import { deleteMemberRecord, listMemberRecords, loadMemberRecord, saveMemberRecord } from '$lib/crypto/vault';
+import { hasMasterKey } from '$lib/crypto/session';
 import type { Member } from '$lib/data/members';
 import type {
 	ChatMessage,
@@ -37,87 +39,26 @@ function withWebMediaUrls(member: Member): Member {
 
 export class WebDataAdapter implements DataAdapter {
 	async getMembers(): Promise<Member[]> {
-		const response = await fetch('/api/members');
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load members: ${response.status} ${response.statusText}`
-			);
-		}
-
-		const members = (await response.json()) as Member[];
-
-		return members.map(withWebMediaUrls);
+		if (!hasMasterKey()) throw new Error('Unlock encryption before loading member profiles.');
+		return listMemberRecords<Member>();
 	}
 
 	async getMemberById(id: string): Promise<Member | null> {
-		const response = await fetch(
-			`/api/members/${encodeURIComponent(id)}`
-		);
-
-		if (response.status === 404) {
-			return null;
-		}
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load member: ${response.status} ${response.statusText}`
-			);
-		}
-
-		const member = (await response.json()) as Member;
-
-		return withWebMediaUrls(member);
+		if (!hasMasterKey()) throw new Error('Unlock encryption before loading member profiles.');
+		return loadMemberRecord<Member>(id);
 	}
 
-async deleteMember(id: string): Promise<void> {
-	const response = await fetch(
-		`/api/members/${encodeURIComponent(id)}`,
-		{
-			method: 'DELETE'
-		}
-	);
-
-	if (!response.ok) {
-		const data =
-			await response.json().catch(() => null);
-
-		throw new Error(
-			data?.error ??
-				`Failed to delete member: ${response.status} ${response.statusText}`
-		);
-	}
-}
-
-async updateMember(
-	id: string,
-	member: Member
-): Promise<Member> {
-	const response = await fetch(
-		`/api/members/${encodeURIComponent(id)}`,
-		{
-			method: 'PATCH',
-			headers: {
-				'Content-Type':
-					'application/json'
-			},
-			body: JSON.stringify(member)
-		}
-	);
-
-	const data =
-		await response.json().catch(() => null);
-
-	if (!response.ok) {
-		throw new Error(
-			data?.error ??
-				`Failed to update member: ${response.status} ${response.statusText}`
-		);
+	async deleteMember(id: string): Promise<void> {
+		if (!hasMasterKey()) throw new Error('Unlock encryption before changing member profiles.');
+		await deleteMemberRecord(id);
 	}
 
-	return data.member ?? member;
-}
-
+	async updateMember(id: string, member: Member): Promise<Member> {
+		if (!hasMasterKey()) throw new Error('Unlock encryption before changing member profiles.');
+		if (id !== member.id) throw new Error('Member ID mismatch.');
+		await saveMemberRecord(member);
+		return member;
+	}
 
 	async importAmpersandData(
 		importData: AmpersandImportData
@@ -244,28 +185,11 @@ async importPluralSpaceData(
 		};
 	}
 
-	async setMemberFronting(
-		memberId: string,
-		isFronting: boolean
-	): Promise<void> {
-		const response = await fetch(
-			`/api/members/${encodeURIComponent(memberId)}/fronting`,
-			{
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					isFronting
-				})
-			}
-		);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update fronting status: ${response.status} ${response.statusText}`
-			);
-		}
+	async setMemberFronting(memberId: string, isFronting: boolean): Promise<void> {
+		if (!hasMasterKey()) throw new Error('Unlock encryption before changing fronting status.');
+		const member = await loadMemberRecord<Member>(memberId);
+		if (!member) throw new Error('Member not found in encrypted storage.');
+		await saveMemberRecord({ ...member, isFronting });
 	}
 
 	async getFrontHistory(): Promise<FrontHistoryEntry[]> {

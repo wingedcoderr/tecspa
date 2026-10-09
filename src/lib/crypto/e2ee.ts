@@ -55,11 +55,11 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
 
 	return crypto.subtle.deriveKey(
 		{
-	name: 'PBKDF2',
-	salt: toArrayBuffer(salt),
-	iterations: PBKDF2_ITERATIONS,
-	hash: 'SHA-256'
-},
+			name: 'PBKDF2',
+			salt: toArrayBuffer(salt),
+			iterations: PBKDF2_ITERATIONS,
+			hash: 'SHA-256'
+		},
 		material,
 		{
 			name: 'AES-GCM',
@@ -81,9 +81,9 @@ export async function encryptJson(
 	const key = await deriveKey(password, salt);
 	const plaintext = encoder.encode(JSON.stringify(value));
 	const ciphertext = await crypto.subtle.encrypt(
-		{ name: 'AES-GCM', iv },
+		{ name: 'AES-GCM', iv: toArrayBuffer(iv) },
 		key,
-		plaintext
+		toArrayBuffer(plaintext)
 	);
 
 	return {
@@ -175,4 +175,50 @@ export async function unwrapMasterKey(
 		false,
 		['encrypt', 'decrypt']
 	);
+}
+
+
+/**
+ * Ciphertext envelope for application records encrypted with the random account
+ * master key. This is separate from password-wrapped master-key payloads.
+ */
+export type VaultEncryptedPayload = {
+	version: 1;
+	algorithm: 'AES-GCM';
+	iv: string;
+	ciphertext: string;
+};
+
+export async function encryptWithMasterKey(
+	value: unknown,
+	masterKey: CryptoKey
+): Promise<VaultEncryptedPayload> {
+	const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+	const plaintext = encoder.encode(JSON.stringify(value));
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: 'AES-GCM', iv: toArrayBuffer(iv) },
+		masterKey,
+		toArrayBuffer(plaintext)
+	);
+	return {
+		version: 1,
+		algorithm: 'AES-GCM',
+		iv: bytesToBase64(iv),
+		ciphertext: bytesToBase64(new Uint8Array(ciphertext))
+	};
+}
+
+export async function decryptWithMasterKey<T>(
+	payload: VaultEncryptedPayload,
+	masterKey: CryptoKey
+): Promise<T> {
+	if (payload?.version !== 1 || payload?.algorithm !== 'AES-GCM') {
+		throw new Error('Unsupported TECSPA encrypted-record format.');
+	}
+	const plaintext = await crypto.subtle.decrypt(
+		{ name: 'AES-GCM', iv: toArrayBuffer(base64ToBytes(payload.iv)) },
+		masterKey,
+		toArrayBuffer(base64ToBytes(payload.ciphertext))
+	);
+	return JSON.parse(decoder.decode(plaintext)) as T;
 }

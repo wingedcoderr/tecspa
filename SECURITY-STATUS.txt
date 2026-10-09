@@ -1,10 +1,12 @@
-TECSPA security status
+TECSPA E2EE STATUS — STAGE 4 PARTIAL MEMBER-PROFILE SLICE
 
-This archive contains the current TECSPA source plus the client-side E2EE foundation in:
-  src/lib/crypto/e2ee.ts
+The web adapter's member CRUD/read/fronting operations and web member-create form now use encrypted vault records.
 
-IMPORTANT: the existing web API is NOT yet fully end-to-end encrypted. Existing PostgreSQL APIs still handle plaintext application data. The encryption foundation is deliberately not wired into those APIs yet, because doing so safely requires a coordinated migration of data storage, authentication/key recovery, sharing, media, and all affected client/server routes.
+THIS IS NOT FULL E2EE.
+- Existing plaintext member rows are not migrated.
+- Legacy member/import APIs remain and can expose or write plaintext.
+- Chat, journal, front history, polls, imports, media, sharing, and desktop SQLite are not fully integrated.
+- Do not claim zero-knowledge security or use this as a complete privacy guarantee.
+- A clean build/type-check has not been verified in this environment.
 
-See docs/SECURITY.md for the architecture and migration plan.
-
-Secrets and .git history were intentionally excluded from this distribution archive.
+See docs/E2EE-STAGE-4-MEMBER-PROFILES.md before testing.
