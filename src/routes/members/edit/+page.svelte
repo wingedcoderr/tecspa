@@ -73,8 +73,18 @@
 					bannerPreview = await memberImageUrl(banner);
 				}
 			} else {
-				avatarPreview = avatar;
-				bannerPreview = banner;
+				// Existing web profiles store private S3 object keys. Resolve them
+				// through the authenticated media API for previews.
+				avatarPreview = avatar
+					? (avatar.startsWith('data:') || avatar.startsWith('http')
+						? avatar
+						: `/api/media/members/${encodeURIComponent(member.id)}/avatar`)
+					: '';
+				bannerPreview = banner
+					? (banner.startsWith('data:') || banner.startsWith('http')
+						? banner
+						: `/api/media/members/${encodeURIComponent(member.id)}/banner`)
+					: '';
 			}
 		} catch (error) {
 			console.error('Failed to load member:', error);

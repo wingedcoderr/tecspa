@@ -113,9 +113,13 @@ async function toggleFronting(member: Member) {
 						] as const;
 					}
 
-					// Local desktop media is not directly accessible
-					// from the web version yet.
-					return [member.id, ''] as const;
+					// Web member records store an S3 object key, not a browser URL.
+					// Resolve it through the authenticated media endpoint; the legacy
+					// row is intentionally retained until media migration is complete.
+					return [
+						member.id,
+						`/api/media/members/${encodeURIComponent(member.id)}/avatar`
+					] as const;
 				})
 		);
 

@@ -70,9 +70,9 @@ if (loadedMember.avatar) {
 	) {
 		avatarUrl = loadedMember.avatar;
 	} else if (isDesktop()) {
-		avatarUrl = await memberImageUrl(
-			loadedMember.avatar
-		);
+		avatarUrl = await memberImageUrl(loadedMember.avatar);
+	} else {
+		avatarUrl = `/api/media/members/${encodeURIComponent(loadedMember.id)}/avatar`;
 	}
 }
 
@@ -85,9 +85,9 @@ if (loadedMember.banner) {
 	) {
 		bannerUrl = loadedMember.banner;
 	} else if (isDesktop()) {
-		bannerUrl = await memberImageUrl(
-			loadedMember.banner
-		);
+		bannerUrl = await memberImageUrl(loadedMember.banner);
+	} else {
+		bannerUrl = `/api/media/members/${encodeURIComponent(loadedMember.id)}/banner`;
 	}
 }
 
