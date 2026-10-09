@@ -4,13 +4,61 @@ import { getDataAdapter } from '$lib/db/data-adapter';
 import { memberImageUrl } from '$lib/media/member-media';
 import { isDesktop } from '$lib/platform';
 import type { Member } from '$lib/data/members';
+import { saveMemberRecord } from '$lib/crypto/vault';
 
 	let members: Member[] = [];
 	let avatarUrls: Record<string, string> = {};
 	let loading = true;
 	let errorMessage = '';
+	let migrationMessage = '';
+	let migrating = false;
 
 	let frontingIds = new Set<string>();
+
+	/**
+	 * One-time, client-side migration from the legacy plaintext member API.
+	 * Records are encrypted in this browser before they are written to the vault.
+	 * The legacy rows are deliberately NOT deleted by this operation.
+	 */
+	async function migrateExistingMembers() {
+		if (isDesktop() || migrating) return;
+		const confirmed = window.confirm(
+			'TECSPA will read your existing member profiles and encrypt copies in the new vault. The old database records will not be deleted. Continue?'
+		);
+		if (!confirmed) return;
+
+		migrating = true;
+		migrationMessage = 'Reading existing member profiles…';
+		errorMessage = '';
+		try {
+			const response = await fetch('/api/members', { headers: { Accept: 'application/json' } });
+			const payload = await response.json().catch(() => null);
+			if (!response.ok) {
+				throw new Error(payload?.message ?? payload?.error ?? `Could not read existing members (${response.status}).`);
+			}
+			if (!Array.isArray(payload)) {
+				throw new Error('The legacy member endpoint returned an unexpected response. No records were migrated.');
+			}
+			const legacyMembers = payload as Member[];
+			if (legacyMembers.some((member) => !member || typeof member.id !== 'string' || !member.id)) {
+				throw new Error('At least one legacy member has an invalid ID. No records were migrated.');
+			}
+			for (let index = 0; index < legacyMembers.length; index += 1) {
+				const member = legacyMembers[index];
+				migrationMessage = `Encrypting member ${index + 1} of ${legacyMembers.length}…`;
+				await saveMemberRecord(member);
+			}
+			members = await getDataAdapter().getMembers();
+			migrationMessage = legacyMembers.length
+				? `Encrypted ${legacyMembers.length} member profile(s). Original database rows were preserved.`
+				: 'The legacy database returned no members. No records were changed.';
+		} catch (error) {
+			console.error('Member vault migration failed:', error);
+			migrationMessage = `Migration stopped: ${String(error)}. Original database rows were preserved; any encrypted copies already written remain in the vault.`;
+		} finally {
+			migrating = false;
+		}
+	}
 
 $: currentFronters = members.filter((member) => member.isFronting);
 
@@ -182,8 +230,15 @@ async function toggleFronting(member: Member) {
 <section class="member-list">
 	{#if members.length === 0}
 		<div class="empty-state">
-			<p>no members yet.</p>
-			<a href="/members/new">create your first member →</a>
+			<p>no encrypted members yet.</p>
+			{#if !isDesktop()}
+				<p>If this system already had member profiles before encrypted storage was enabled, migrate copies into the vault first.</p>
+				<button type="button" on:click={migrateExistingMembers} disabled={migrating}>
+					{migrating ? 'encrypting profiles…' : 'migrate existing member profiles'}
+				</button>
+				{#if migrationMessage}<p role="status">{migrationMessage}</p>{/if}
+			{/if}
+			<a href="/members/new">create a new member →</a>
 		</div>
 	{:else}
 		{#each members as member, index}
@@ -374,6 +429,16 @@ async function toggleFronting(member: Member) {
 	}
 
 	.message-panel,
+	.empty-state button {
+		border: 1px solid var(--tecspa-accent, currentColor);
+		border-radius: 0.5rem;
+		padding: 0.7rem 1rem;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+	}
+	.empty-state button:disabled { opacity: 0.6; cursor: wait; }
+
 	.empty-state {
 		padding: 52px 28px;
 		text-align: center;

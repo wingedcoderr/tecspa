@@ -14,3 +14,8 @@ This stage connects the web data adapter's member list, member lookup, member up
 ## Verification
 
 Run `npm.cmd run check` in a clean install. This environment could not complete `npm ci` within its execution window, so no successful type-check or build is claimed for this ZIP. Review and test this stage on a backup/test account before using it with existing data.
+
+
+## Legacy member copy migration
+
+The empty member directory now offers a web-only, explicit migration action when no encrypted member records exist. It fetches the current authenticated user's legacy `/api/members` response, encrypts each complete member object in the browser using the in-memory master key, and writes encrypted copies to `/api/crypto/vault`. It deliberately does not delete or modify legacy PostgreSQL rows. If an error occurs midway, some encrypted copies may already exist; retrying uses stable member IDs and overwrites those encrypted copies safely. This migration does not encrypt media bytes or remove the legacy plaintext API. Do not describe the overall application as fully E2EE until those remaining paths are addressed and tested.
