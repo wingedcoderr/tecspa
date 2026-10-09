@@ -75,6 +75,13 @@
 		members
 	</a>
 
+	```svelte
+<a href="/communities" class="top-nav-link">
+	<span>✦</span>
+	communities
+</a>
+```
+
 	<a href="/chat" class="top-nav-link">
 		<span>❧</span>
 		chat
@@ -346,6 +353,25 @@
 
 	<span class="card-arrow">↗</span>
 </a>
+
+```svelte
+<a class="link-card" href="/communities">
+	<div class="card-top">
+		<span class="card-symbol">✦</span>
+		<span class="card-number">05</span>
+	</div>
+
+	<div class="card-content">
+		<strong>communities</strong>
+
+		<small>
+			connect, share, and find your people
+		</small>
+	</div>
+
+	<span class="card-arrow">↗</span>
+</a>
+```
 
 				<a class="link-card" href="/front">
 					<div class="card-top">
