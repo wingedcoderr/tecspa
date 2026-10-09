@@ -6,6 +6,7 @@
 		selectAndStoreMemberImage
 	} from '$lib/media/member-media';
 	import type { Member } from '$lib/data/members';
+	import { saveEncryptedMemberMediaDataUrl, resolveEncryptedMemberMedia } from '$lib/media/encrypted-member-media';
 
 	let name = '';
 	let pronouns = '';
@@ -81,12 +82,14 @@ function updateCustomField(
 					reader.readAsDataURL(selectedFile);
 				});
 
+				const encryptedRef = await saveEncryptedMemberMediaDataUrl(memberId, kind, dataUrl);
+				const preview = await resolveEncryptedMemberMedia(encryptedRef);
 				if (kind === 'avatar') {
-					avatar = dataUrl;
-					avatarPreview = dataUrl;
+					avatar = encryptedRef;
+					avatarPreview = preview;
 				} else {
-					banner = dataUrl;
-					bannerPreview = dataUrl;
+					banner = encryptedRef;
+					bannerPreview = preview;
 				}
 
 				return;

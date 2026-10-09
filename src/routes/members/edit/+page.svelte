@@ -7,6 +7,7 @@
 	import { isDesktop } from '$lib/platform';
 
 	import type { Member } from '$lib/data/members';
+	import { saveEncryptedMemberMediaDataUrl, resolveEncryptedMemberMedia } from '$lib/media/encrypted-member-media';
 
 	let member: Member | null = null;
 
@@ -73,18 +74,12 @@
 					bannerPreview = await memberImageUrl(banner);
 				}
 			} else {
-				// Existing web profiles store private S3 object keys. Resolve them
-				// through the authenticated media API for previews.
-				avatarPreview = avatar
-					? (avatar.startsWith('data:') || avatar.startsWith('http')
-						? avatar
-						: `/api/media/members/${encodeURIComponent(member.id)}/avatar`)
-					: '';
-				bannerPreview = banner
-					? (banner.startsWith('data:') || banner.startsWith('http')
-						? banner
-						: `/api/media/members/${encodeURIComponent(member.id)}/banner`)
-					: '';
+				avatarPreview = avatar.startsWith('e2ee-media:')
+					? await resolveEncryptedMemberMedia(avatar)
+					: (avatar.startsWith('data:') || avatar.startsWith('http') ? avatar : '');
+				bannerPreview = banner.startsWith('e2ee-media:')
+					? await resolveEncryptedMemberMedia(banner)
+					: (banner.startsWith('data:') || banner.startsWith('http') ? banner : '');
 			}
 		} catch (error) {
 			console.error('Failed to load member:', error);
@@ -203,12 +198,14 @@
 				return;
 			}
 
+			const encryptedRef = await saveEncryptedMemberMediaDataUrl(member.id, kind, dataUrl);
+			const preview = await resolveEncryptedMemberMedia(encryptedRef);
 			if (kind === 'avatar') {
-				avatar = dataUrl;
-				avatarPreview = dataUrl;
+				avatar = encryptedRef;
+				avatarPreview = preview;
 			} else {
-				banner = dataUrl;
-				bannerPreview = dataUrl;
+				banner = encryptedRef;
+				bannerPreview = preview;
 			}
 
 			return;

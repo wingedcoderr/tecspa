@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolveEncryptedMemberMedia } from '$lib/media/encrypted-member-media';
 console.log('PROFILE FILE LOADED');
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -62,7 +63,9 @@ let errorMessage = $state('');
 			 */
 
 if (loadedMember.avatar) {
-	if (
+	if (loadedMember.avatar.startsWith('e2ee-media:')) {
+		avatarUrl = await resolveEncryptedMemberMedia(loadedMember.avatar);
+	} else if (
 		loadedMember.avatar.startsWith('data:') ||
 		loadedMember.avatar.startsWith('http://') ||
 		loadedMember.avatar.startsWith('https://') ||
@@ -72,12 +75,14 @@ if (loadedMember.avatar) {
 	} else if (isDesktop()) {
 		avatarUrl = await memberImageUrl(loadedMember.avatar);
 	} else {
-		avatarUrl = `/api/media/members/${encodeURIComponent(loadedMember.id)}/avatar`;
+		avatarUrl = ''; // Legacy server media is not fetched as plaintext.
 	}
 }
 
 if (loadedMember.banner) {
-	if (
+	if (loadedMember.banner.startsWith('e2ee-media:')) {
+		bannerUrl = await resolveEncryptedMemberMedia(loadedMember.banner);
+	} else if (
 		loadedMember.banner.startsWith('data:') ||
 		loadedMember.banner.startsWith('http://') ||
 		loadedMember.banner.startsWith('https://') ||
@@ -87,7 +92,7 @@ if (loadedMember.banner) {
 	} else if (isDesktop()) {
 		bannerUrl = await memberImageUrl(loadedMember.banner);
 	} else {
-		bannerUrl = `/api/media/members/${encodeURIComponent(loadedMember.id)}/banner`;
+		bannerUrl = ''; // Legacy server media is not fetched as plaintext.
 	}
 }
 

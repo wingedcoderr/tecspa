@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 import { getDataAdapter } from '$lib/db/data-adapter';
 import { memberImageUrl } from '$lib/media/member-media';
+	import { resolveEncryptedMemberMedia } from '$lib/media/encrypted-member-media';
 import { isDesktop } from '$lib/platform';
 import type { Member } from '$lib/data/members';
 import { saveMemberRecord } from '$lib/crypto/vault';
@@ -222,6 +223,10 @@ async function toggleFronting(member: Member) {
 
 					// Web browsers can use normal web/data/asset URLs
 					// directly. Desktop-only local media needs Tauri.
+					if (avatar.startsWith('e2ee-media:')) {
+						return [member.id, await resolveEncryptedMemberMedia(avatar)] as const;
+					}
+
 					if (
 						avatar.startsWith('data:') ||
 						avatar.startsWith('http://') ||
@@ -238,13 +243,9 @@ async function toggleFronting(member: Member) {
 						] as const;
 					}
 
-					// Web member records store an S3 object key, not a browser URL.
-					// Resolve it through the authenticated media endpoint; the legacy
-					// row is intentionally retained until media migration is complete.
-					return [
-						member.id,
-						`/api/media/members/${encodeURIComponent(member.id)}/avatar`
-					] as const;
+					// Never fetch legacy plaintext media from the server. Old object keys
+					// must be replaced by locally selected images and encrypted client-side.
+					return [member.id, ''] as const;
 				})
 		);
 
