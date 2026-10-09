@@ -18,6 +18,12 @@ import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
 	let unlockPassword = '';
 	let unlocking = false;
 	let unlockError = '';
+	let searchQuery = '';
+	let selectedFolder = 'all';
+	let newFolderName = '';
+	let folderMemberId = '';
+	let folderMessage = '';
+	let folderBusy = false;
 
 	let frontingIds = new Set<string>();
 
@@ -91,6 +97,90 @@ import { unwrapMasterKey, type EncryptedPayload } from '$lib/crypto/e2ee';
 	}
 
 $: currentFronters = members.filter((member) => member.isFronting);
+$: folders = [...new Set(members.map((member) => member.folder?.trim()).filter((folder): folder is string => Boolean(folder)))].sort((a, b) => a.localeCompare(b));
+$: normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+$: filteredMembers = members.filter((member) => {
+	const matchesFolder = selectedFolder === 'all'
+		|| (selectedFolder === 'unfiled' ? !member.folder : member.folder === selectedFolder);
+	const searchable = [member.name, member.pronouns, member.role, member.status, member.about, ...(member.aliases ?? []), ...(member.interests ?? []), ...(member.frontTriggers ?? [])]
+		.join(' ').toLocaleLowerCase();
+	return matchesFolder && (!normalizedQuery || searchable.includes(normalizedQuery));
+});
+
+async function assignMemberFolder(member: Member, folderName: string) {
+	const normalizedFolder = folderName.trim();
+	try {
+		folderBusy = true;
+		folderMessage = '';
+		const updated = { ...member, folder: normalizedFolder || undefined };
+		await getDataAdapter().updateMember(member.id, updated);
+		members = members.map((item) => item.id === member.id ? updated : item);
+		folderMessage = normalizedFolder ? `Moved ${member.name} to ${normalizedFolder}.` : `Removed ${member.name} from its folder.`;
+	} catch (error) {
+		folderMessage = `Could not update folder: ${String(error)}`;
+	} finally {
+		folderBusy = false;
+	}
+}
+
+async function createFolder() {
+	const name = newFolderName.trim();
+	if (!name) {
+		folderMessage = 'Enter a folder name first.';
+		return;
+	}
+	if (folders.some((folder) => folder.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+		folderMessage = 'A folder with that name already exists.';
+		return;
+	}
+	if (members.length === 0) {
+		folderMessage = 'Create or migrate a member first. Folders are stored with encrypted member records.';
+		return;
+	}
+	const target = members.find((member) => member.id === folderMemberId) ?? members[0];
+	newFolderName = '';
+	await assignMemberFolder(target, name);
+	selectedFolder = name;
+}
+
+async function renameFolder(oldName: string) {
+	const nextName = window.prompt(`Rename folder “${oldName}” to:`, oldName)?.trim();
+	if (!nextName || nextName === oldName) return;
+	if (folders.some((folder) => folder.toLocaleLowerCase() === nextName.toLocaleLowerCase())) {
+		folderMessage = 'A folder with that name already exists.';
+		return;
+	}
+	folderBusy = true;
+	folderMessage = '';
+	try {
+		const affected = members.filter((member) => member.folder === oldName);
+		for (const member of affected) await getDataAdapter().updateMember(member.id, { ...member, folder: nextName });
+		members = members.map((member) => member.folder === oldName ? { ...member, folder: nextName } : member);
+		if (selectedFolder === oldName) selectedFolder = nextName;
+		folderMessage = `Renamed ${oldName} to ${nextName}.`;
+	} catch (error) {
+		folderMessage = `Folder rename stopped: ${String(error)}. Some members may still use the old folder name.`;
+	} finally {
+		folderBusy = false;
+	}
+}
+
+async function deleteFolder(oldName: string) {
+	if (!window.confirm(`Delete the folder “${oldName}”? Members will be kept and moved to Unfiled.`)) return;
+	folderBusy = true;
+	folderMessage = '';
+	try {
+		const affected = members.filter((member) => member.folder === oldName);
+		for (const member of affected) await getDataAdapter().updateMember(member.id, { ...member, folder: undefined });
+		members = members.map((member) => member.folder === oldName ? { ...member, folder: undefined } : member);
+		if (selectedFolder === oldName) selectedFolder = 'all';
+		folderMessage = `Deleted ${oldName}. Member profiles were preserved.`;
+	} catch (error) {
+		folderMessage = `Folder deletion stopped: ${String(error)}. Some members may still be assigned to it.`;
+	} finally {
+		folderBusy = false;
+	}
+}
 
 async function toggleFronting(member: Member) {
 	try {
@@ -228,6 +318,47 @@ async function toggleFronting(member: Member) {
 				<p>{errorMessage}</p>
 			</section>
 		{:else}
+			<section class="organize-panel" aria-label="Search and organize members">
+				<div class="search-row">
+					<label class="search-field">
+						<span>Search members</span>
+						<input type="search" bind:value={searchQuery} placeholder="Name, alias, pronouns, interests…" autocomplete="off" />
+					</label>
+					<button class="clear-search" type="button" on:click={() => searchQuery = ''} disabled={!searchQuery}>clear</button>
+				</div>
+				<div class="folder-toolbar">
+					<label class="folder-filter">
+						<span>Folder</span>
+						<select bind:value={selectedFolder}>
+							<option value="all">All members ({members.length})</option>
+							<option value="unfiled">Unfiled ({members.filter((member) => !member.folder).length})</option>
+							{#each folders as folder}<option value={folder}>{folder} ({members.filter((member) => member.folder === folder).length})</option>{/each}
+						</select>
+					</label>
+					{#if selectedFolder !== 'all' && selectedFolder !== 'unfiled'}
+						<div class="folder-actions">
+							<button type="button" on:click={() => renameFolder(selectedFolder)} disabled={folderBusy}>rename folder</button>
+							<button type="button" on:click={() => deleteFolder(selectedFolder)} disabled={folderBusy}>delete folder</button>
+						</div>
+					{/if}
+				</div>
+				<form class="create-folder-row" on:submit|preventDefault={createFolder}>
+					<label>
+						<span>New folder</span>
+						<input bind:value={newFolderName} maxlength="64" placeholder="e.g. Main fronters" />
+					</label>
+					<label>
+						<span>Place a member in it</span>
+						<select bind:value={folderMemberId}>
+							{#each members as member}<option value={member.id}>{member.name}</option>{/each}
+						</select>
+					</label>
+					<button type="submit" disabled={folderBusy || members.length === 0}>create folder</button>
+				</form>
+				<p class="folder-help">Each member belongs to one folder at a time. Folder assignments are saved inside the encrypted member profile.</p>
+				{#if folderMessage}<p class="folder-status" role="status">{folderMessage}</p>{/if}
+			</section>
+
 			<section class="directory-intro">
 				<p class="section-label">✦ directory ✦</p>
 
@@ -295,8 +426,13 @@ async function toggleFronting(member: Member) {
 			{/if}
 			<a href="/members/new">create a new member →</a>
 		</div>
+	{:else if filteredMembers.length === 0}
+		<div class="empty-state">
+			<p>{normalizedQuery ? `no members match “${searchQuery.trim()}”.` : 'this folder is empty.'}</p>
+			<button type="button" on:click={() => { searchQuery = ''; selectedFolder = 'all'; }}>show all members</button>
+		</div>
 	{:else}
-		{#each members as member, index}
+		{#each filteredMembers as member, index}
 			<article class="member-card">
 				<div class="avatar">
 					{#if avatarUrls[member.id]}
@@ -317,7 +453,13 @@ async function toggleFronting(member: Member) {
 					<h2>{member.name}</h2>
 
 					<p class="pronouns">{member.pronouns}</p>
-
+					<label class="member-folder-select">
+						<span>Folder</span>
+						<select value={member.folder ?? ''} on:change={(event) => assignMemberFolder(member, (event.currentTarget as HTMLSelectElement).value)} disabled={folderBusy}>
+							<option value="">Unfiled</option>
+							{#each folders as folder}<option value={folder}>{folder}</option>{/each}
+						</select>
+					</label>
 
 					<div class="member-actions">
 						<a
@@ -481,6 +623,40 @@ async function toggleFronting(member: Member) {
 	main {
 		max-width: 920px;
 		margin: 34px auto 0;
+	}
+
+
+	.organize-panel {
+		margin: 28px 0;
+		padding: 22px;
+		border: 1px solid var(--tecspa-border);
+		border-radius: var(--tecspa-panel-radius);
+		background: var(--tecspa-surface);
+		box-shadow: var(--tecspa-panel-shadow);
+	}
+	.search-row, .folder-toolbar, .create-folder-row { display: flex; align-items: end; gap: 12px; }
+	.search-row { margin-bottom: 14px; }
+	.search-field, .folder-filter, .create-folder-row label, .member-folder-select { display: grid; gap: 6px; min-width: 0; }
+	.search-field { flex: 1; }
+	.search-field span, .folder-filter span, .create-folder-row label span, .member-folder-select span { color: var(--tecspa-text-muted); font-size: .78rem; letter-spacing: .04em; }
+	.organize-panel input, .organize-panel select, .member-folder-select select { width: 100%; min-width: 0; padding: 10px 12px; color: var(--tecspa-text); background: var(--tecspa-background); border: 1px solid var(--tecspa-border); border-radius: 8px; font: inherit; }
+	.organize-panel button, .folder-actions button { padding: 10px 13px; color: var(--tecspa-accent-dark); background: transparent; border: 1px solid var(--tecspa-border); border-radius: 8px; cursor: pointer; font: inherit; }
+	.organize-panel button:disabled { opacity: .5; cursor: not-allowed; }
+	.folder-toolbar { justify-content: space-between; margin-bottom: 14px; }
+	.folder-filter { flex: 1; max-width: 360px; }
+	.folder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+	.create-folder-row { align-items: end; padding-top: 14px; border-top: 1px solid var(--tecspa-border); }
+	.create-folder-row label { flex: 1; }
+	.folder-help, .folder-status { margin: 12px 0 0; color: var(--tecspa-text-muted); font-size: .82rem; line-height: 1.5; }
+	.folder-status { color: var(--tecspa-accent-dark); }
+	.member-folder-select { margin-top: 12px; max-width: 260px; }
+	.clear-search { min-height: 42px; }
+	@media (max-width: 620px) {
+		.organize-panel { padding: 15px; }
+		.folder-toolbar, .create-folder-row { align-items: stretch; flex-direction: column; }
+		.folder-filter { max-width: none; }
+		.folder-actions { display: grid; grid-template-columns: 1fr 1fr; }
+		.search-row { align-items: end; }
 	}
 
 	.message-panel,

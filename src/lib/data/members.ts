@@ -30,6 +30,8 @@ export type Member = {
 	banner: string;
 	isFronting: boolean;
 	customFields: CustomField[];
+	/** Optional organization folder. Stored with the encrypted member record. */
+	folder?: string;
 };
 
 export const members: Member[] = [
