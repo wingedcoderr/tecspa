@@ -1669,4 +1669,201 @@ import {
 		}
 	}
 
+
+	/* =========================================================
+	   RENTRY EDITORIAL LAYER — lace, paper, collage, keepsakes
+	   Shared across every page; theme variables remain in charge
+	   of the actual palette so existing presets still work.
+	   ========================================================= */
+
+	:global(body) {
+		background-image:
+			radial-gradient(ellipse at 50% -12%, color-mix(in srgb, var(--tecspa-accent) 13%, transparent), transparent 48%),
+			linear-gradient(180deg, color-mix(in srgb, var(--tecspa-background) 94%, white), var(--tecspa-background));
+		background-attachment: fixed;
+	}
+
+	.tecspa-shell::before {
+		content: '';
+		position: fixed;
+		inset: 0 0 auto;
+		z-index: 0;
+		height: 13px;
+		pointer-events: none;
+		background-image: url('/theme-art/crimson-clinical/lace-divider-top.png');
+		background-position: center top;
+		background-size: auto 24px;
+		opacity: .28;
+		filter: grayscale(1);
+	}
+
+	.account-bar { position: relative; z-index: 5; padding: 18px 22px 0; }
+	.account-bar-inner {
+		max-width: 1180px;
+		min-height: 52px;
+		margin: 0 auto;
+		padding: 8px 15px;
+		border: 1px solid color-mix(in srgb, var(--tecspa-accent) 35%, var(--tecspa-border));
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--tecspa-surface) 91%, transparent);
+		box-shadow: 0 5px 18px color-mix(in srgb, var(--tecspa-accent) 9%, transparent), inset 0 1px rgba(255,255,255,.75);
+		backdrop-filter: blur(12px);
+	}
+	.account-brand { letter-spacing: .16em; font-family: var(--tecspa-heading-font); }
+	.account-brand-mark { border-radius: 2px !important; box-shadow: 2px 2px 0 color-mix(in srgb, var(--tecspa-accent) 22%, transparent); }
+
+	:global(.page-shell), :global(.chat-page), :global(.customize-page),
+	:global(.import-page), :global(.account-shell), :global(.auth-shell),
+	:global(.communities-page), :global(.background > .page) {
+		width: min(1120px, calc(100% - 36px));
+		margin-inline: auto;
+	}
+
+	:global(.page-header), :global(.auth-header), :global(.account-header) {
+		position: relative;
+		isolation: isolate;
+		padding: clamp(28px, 5vw, 54px) 22px 30px !important;
+		margin: 20px 0 22px;
+		text-align: center;
+		border: 1px solid color-mix(in srgb, var(--tecspa-accent) 32%, var(--tecspa-border));
+		background:
+			linear-gradient(180deg, color-mix(in srgb, var(--tecspa-surface) 93%, transparent), color-mix(in srgb, var(--tecspa-surface-alt) 87%, transparent));
+		box-shadow: var(--tecspa-panel-shadow), inset 0 0 0 4px color-mix(in srgb, var(--tecspa-accent) 5%, transparent);
+	}
+	:global(.page-header)::before, :global(.auth-header)::before, :global(.account-header)::before {
+		content: '❦  ───────────────  ✦  ───────────────  ❦';
+		display: block;
+		margin: 0 auto 14px;
+		color: var(--tecspa-accent);
+		font-family: Georgia, serif;
+		font-size: clamp(10px, 1.8vw, 15px);
+		letter-spacing: .12em;
+		opacity: .72;
+	}
+	:global(.page-header h1), :global(.auth-header h1), :global(.account-header h1) {
+		margin: 7px 0 9px;
+		font-family: var(--tecspa-heading-font);
+		font-weight: 500;
+		letter-spacing: .035em;
+		text-shadow: 0 2px 0 color-mix(in srgb, var(--tecspa-accent) 12%, transparent);
+	}
+	:global(.eyebrow) { letter-spacing: .2em !important; text-transform: uppercase; }
+	:global(.subtitle) { max-width: 620px; margin-inline: auto; line-height: 1.65; }
+
+	:global(.top-navigation), :global(.page-navigation) {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		padding: 10px;
+		margin: 18px auto 24px;
+		border: 1px solid color-mix(in srgb, var(--tecspa-accent) 30%, var(--tecspa-border));
+		background: color-mix(in srgb, var(--tecspa-surface) 92%, transparent);
+		box-shadow: 0 5px 18px color-mix(in srgb, var(--tecspa-accent) 7%, transparent);
+	}
+	:global(.top-nav-link), :global(.page-navigation a), :global(.back-link) {
+		min-height: 36px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		padding: 8px 13px;
+		border: 1px solid transparent;
+		border-radius: 2px !important;
+		color: var(--tecspa-text-muted);
+		font-size: .78rem;
+		font-weight: 700;
+		letter-spacing: .045em;
+		text-decoration: none;
+		transition: .18s ease;
+	}
+	:global(.top-nav-link:hover), :global(.page-navigation a:hover), :global(.back-link:hover) {
+		border-color: color-mix(in srgb, var(--tecspa-accent) 30%, transparent);
+		background: color-mix(in srgb, var(--tecspa-accent) 9%, var(--tecspa-surface));
+		color: var(--tecspa-accent-dark);
+		transform: translateY(-1px);
+	}
+	:global(.top-nav-link.active), :global(.page-navigation a.active) {
+		border-color: color-mix(in srgb, var(--tecspa-accent) 42%, var(--tecspa-border));
+		background: color-mix(in srgb, var(--tecspa-accent) 12%, var(--tecspa-surface));
+		color: var(--tecspa-accent-dark);
+	}
+
+	:global(.panel), :global(.card), :global(article), :global(.message-panel),
+	:global(.customization-section), :global(.auth-card), :global(.account-card),
+	:global(.chat-shell), :global(.chat-sidebar), :global(.chat-main),
+	:global(.front-section), :global(.organize-panel), :global(.entry-card),
+	:global(.community-sidebar), :global(.community-main) {
+		border: 1px solid color-mix(in srgb, var(--tecspa-accent) 27%, var(--tecspa-border)) !important;
+		border-radius: 3px !important;
+		background: color-mix(in srgb, var(--tecspa-surface) 96%, transparent) !important;
+		box-shadow: 0 9px 28px color-mix(in srgb, var(--tecspa-accent) 8%, transparent), inset 0 1px rgba(255,255,255,.42) !important;
+	}
+	:global(.panel), :global(.card), :global(.message-panel), :global(.customization-section), :global(.auth-card), :global(.account-card) {
+		position: relative;
+	}
+	:global(.panel-heading), :global(.section-heading), :global(.sidebar-heading) {
+		font-family: var(--tecspa-heading-font);
+		letter-spacing: .035em;
+	}
+
+	:global(button), :global(.primary-button), :global(.secondary-button),
+	:global(.primary), :global(.secondary), :global(.account-button) {
+		border-radius: 2px !important;
+		letter-spacing: .035em;
+		font-weight: 700;
+		transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+	}
+	:global(button:hover), :global(.primary-button:hover), :global(.secondary-button:hover),
+	:global(.primary:hover), :global(.secondary:hover) { transform: translateY(-1px); filter: brightness(1.04); }
+	:global(input), :global(textarea), :global(select) {
+		border-radius: 2px !important;
+		border-color: color-mix(in srgb, var(--tecspa-accent) 28%, var(--tecspa-border)) !important;
+		background: color-mix(in srgb, var(--tecspa-surface) 96%, white) !important;
+		box-shadow: inset 0 1px 3px rgba(35,20,30,.045);
+	}
+	:global(input:focus), :global(textarea:focus), :global(select:focus) {
+		outline: 2px solid color-mix(in srgb, var(--tecspa-accent) 28%, transparent);
+		outline-offset: 1px;
+	}
+
+	/* The home page gets the strongest collage treatment. */
+	:global(.background > .page) { max-width: 1080px; }
+	:global(.top-navigation) { margin-top: 20px; }
+	:global(.hero) {
+		position: relative;
+		isolation: isolate;
+		border: 1px solid color-mix(in srgb, var(--tecspa-accent) 42%, var(--tecspa-border)) !important;
+		border-radius: 2px !important;
+		background:
+			linear-gradient(90deg, color-mix(in srgb, var(--tecspa-surface) 91%, transparent), color-mix(in srgb, var(--tecspa-surface-alt) 76%, transparent)),
+			url('/theme-art/ashen-gothic/lace-divider.png') center / cover;
+		box-shadow: 0 14px 42px color-mix(in srgb, var(--tecspa-accent) 12%, transparent), inset 0 0 0 5px color-mix(in srgb, var(--tecspa-accent) 6%, transparent);
+	}
+	:global(.hero-inner) { position: relative; z-index: 1; }
+	:global(.hero h1) { font-family: var(--tecspa-heading-font); letter-spacing: .055em; }
+	:global(.hero-kicker), :global(.tagline) { letter-spacing: .12em; }
+	:global(.theme-art-strip) { margin-block: 22px !important; filter: saturate(.82) contrast(1.02); }
+	:global(.status-strip) {
+		border-block: 1px solid color-mix(in srgb, var(--tecspa-accent) 32%, var(--tecspa-border));
+		background: color-mix(in srgb, var(--tecspa-surface) 86%, transparent);
+		letter-spacing: .12em;
+	}
+	:global(.intro), :global(.feature-grid), :global(.home-section) { gap: 18px; }
+
+	/* Avoid trapping content or animations on narrow screens. */
+	@media (max-width: 700px) {
+		.account-bar { padding: 13px 12px 0; }
+		:global(.page-shell), :global(.chat-page), :global(.customize-page),
+		:global(.import-page), :global(.account-shell), :global(.auth-shell),
+		:global(.communities-page), :global(.background > .page) { width: min(100% - 22px, 1120px); }
+		:global(.page-header), :global(.auth-header), :global(.account-header) { padding: 25px 13px 22px !important; }
+		:global(.top-navigation), :global(.page-navigation) { gap: 4px; padding: 7px; }
+		:global(.top-nav-link), :global(.page-navigation a) { padding: 7px 9px; font-size: .72rem; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(*), :global(*::before), :global(*::after) { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+	}
+
 </style>
